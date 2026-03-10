@@ -93,6 +93,12 @@ Rate limits are fetched from the Anthropic API using your OAuth token (resolved 
 
 Works on Linux and macOS. Date formatting and credential resolution adapt automatically to the platform.
 
+## Support
+
+If you find this useful, consider [buying me a coffee](https://www.buymeacoffee.com/dsebastien).
+
+Check out my other projects at [dsebastien.net](https://dsebastien.net).
+
 ## Credits
 
 Inspired by [kamranahmedse/claude-statusline](https://github.com/kamranahmedse/claude-statusline).
