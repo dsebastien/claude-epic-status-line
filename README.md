@@ -4,19 +4,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 
 ## What it looks like
 
-**Line 1** — main info bar:
-
-```
-Opus 4.6 │ 12% (42k/200k) │ …/my-project (main*) │ $0.45 │ ⏱ 12m │ ● high
-```
-
-**Lines 2-4** — rate limit bars (when available):
-
-```
-current ●●●○○○○○○○  30% ⟳ 2:45pm
-weekly  ●●○○○○○○○○  20% ⟳ mar 15, 9:00am
-extra   ●○○○○○○○○○  $1.20/$50.00 ⟳ apr 1
-```
+![Claude Epic Status Line screenshot](screenshot.png)
 
 ## Features
 
