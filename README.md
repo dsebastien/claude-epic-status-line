@@ -14,7 +14,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 | **Context** | Usage percentage + token counts (e.g., `12% (42k/200k)`) with color coding |
 | **Auto-compact warning** | Blinking `⚠` when context usage >= 80% |
 | **Directory** | Truncated to last 2 path components |
-| **Git branch** | Branch name with dirty indicator (`*`) |
+| **Git branch** | Branch name with detailed status: staged (`S:2`), unstaged (`U:1`), untracked (`A:3`) |
 | **Git ahead/behind** | `⇡2⇣1` arrows showing commits ahead/behind upstream |
 | **Worktree** | `⎇wt` indicator when running inside a git worktree |
 | **Session cost** | `$X.XX` when cost data is available |

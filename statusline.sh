@@ -159,15 +159,27 @@ dirname_short=$(dir_display "$cwd")
 
 # ── Git: branch, dirty, ahead/behind, worktree ─────────
 git_branch=""
-git_dirty=""
+git_staged=0
+git_unstaged=0
+git_untracked=0
 git_remote_status=""
 is_worktree=false
 
 if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null || git -C "$cwd" rev-parse --short HEAD 2>/dev/null)
 
-    if [ -n "$(git -C "$cwd" status --porcelain 2>/dev/null)" ]; then
-        git_dirty="*"
+    porcelain=$(git -C "$cwd" status --porcelain 2>/dev/null)
+    if [ -n "$porcelain" ]; then
+        while IFS= read -r _line; do
+            _x="${_line:0:1}"
+            _y="${_line:1:1}"
+            if [ "$_x" = "?" ]; then
+                git_untracked=$(( git_untracked + 1 ))
+            else
+                [ "$_x" != " " ] && git_staged=$(( git_staged + 1 ))
+                [ "$_y" != " " ] && git_unstaged=$(( git_unstaged + 1 ))
+            fi
+        done <<< "$porcelain"
     fi
 
     read -r behind ahead < <(git -C "$cwd" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
@@ -221,7 +233,10 @@ line1+="${ctx_segment}"
 line1+="${sep}"
 line1+="${cyan}${dirname_short}${reset}"
 if [ -n "$git_branch" ]; then
-    line1+=" ${green}(${git_branch}${red}${git_dirty}${reset}"
+    line1+=" ${green}(${git_branch}"
+    [ "$git_staged" -gt 0 ] && line1+=" ${yellow}S:${git_staged}${reset}"
+    [ "$git_unstaged" -gt 0 ] && line1+=" ${red}U:${git_unstaged}${reset}"
+    [ "$git_untracked" -gt 0 ] && line1+=" ${cyan}A:${git_untracked}${reset}"
     [ -n "$git_remote_status" ] && line1+=" ${yellow}${git_remote_status}${reset}"
     line1+="${green})${reset}"
 fi
