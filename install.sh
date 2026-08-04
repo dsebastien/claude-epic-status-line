@@ -15,8 +15,11 @@ done
 
 mkdir -p "$HOME/.claude"
 
-# Backup existing statusline script if present
-if [ -f "$DEST" ]; then
+# Backup an existing statusline script — but never overwrite an earlier
+# backup, and never back up our own script over the user's original
+# (re-running install.sh is the normal upgrade path)
+if [ -f "$DEST" ] && [ ! -f "${DEST}.bak" ] \
+   && ! grep -q "Claude Epic Status Line" "$DEST" 2>/dev/null; then
     cp "$DEST" "${DEST}.bak"
     echo "Backed up existing statusline to ${DEST}.bak"
 fi
@@ -96,18 +99,28 @@ CFGEOF
 fi
 
 # Update settings.json
-if [ -f "$SETTINGS" ]; then
-    # Merge statusLine into existing settings
+if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ]; then
+    # Merge statusLine into existing settings; fail loudly on invalid JSON
     tmp=$(mktemp)
-    jq '. + {"statusLine": {"type": "command", "command": "bash '"$DEST"'"}}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-    echo "Updated $SETTINGS with statusLine config"
+    if jq --arg dest "$DEST" \
+        '. + {statusLine: {type: "command", command: ("bash \"" + $dest + "\"")}}' \
+        "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
+        mv "$tmp" "$SETTINGS"
+        echo "Updated $SETTINGS with statusLine config"
+    else
+        rm -f "$tmp"
+        echo "Error: could not update $SETTINGS (invalid JSON?)." >&2
+        echo "Fix the file, or add this key manually:" >&2
+        echo "  \"statusLine\": {\"type\": \"command\", \"command\": \"bash \\\"$DEST\\\"\"}" >&2
+        exit 1
+    fi
 else
     # Create new settings file
     cat > "$SETTINGS" <<EOF
 {
   "statusLine": {
     "type": "command",
-    "command": "bash $DEST"
+    "command": "bash \"$DEST\""
   }
 }
 EOF

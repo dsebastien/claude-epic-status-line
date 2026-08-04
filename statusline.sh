@@ -15,10 +15,21 @@
 set -f
 export LC_ALL=C
 
-input=$(cat)
 mode="${1:-}"
+if [ -t 0 ]; then
+    input=""
+else
+    input=$(cat)
+fi
 
 if [ -z "$input" ] && [ "$mode" != "explain" ]; then
+    printf "Claude"
+    exit 0
+fi
+
+# jq is a hard requirement; without it every parse below would silently
+# misrender (fake 0% quota rows) — degrade to a static line instead.
+if ! command -v jq >/dev/null 2>&1; then
     printf "Claude"
     exit 0
 fi
@@ -27,7 +38,7 @@ fi
 _cesl_env=$(export -p 2>/dev/null | grep '^declare -x CESL_' | sed 's/^declare -x /export /')
 _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 [ -f "$_cesl_cfg" ] && . "$_cesl_cfg"
-[ -n "$_cesl_env" ] && eval "$_cesl_env"
+[ -n "$_cesl_env" ] && eval "$_cesl_env" 2>/dev/null
 
 # Escalation thresholds (single scale: dim < warn < high < crit)
 : "${CESL_WARN:=70}"
@@ -70,6 +81,13 @@ _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 : "${CESL_COLOR_HAIKU:=64;200;180}"
 : "${CESL_COLOR_FABLE:=240;190;60}"
 : "${CESL_COLOR_MODEL:=0;153;255}"
+
+# Sanitize numeric knobs — a config typo must not break rendering
+case "$CESL_WARN" in ''|*[!0-9]*) CESL_WARN=70 ;; esac
+case "$CESL_HIGH" in ''|*[!0-9]*) CESL_HIGH=80 ;; esac
+case "$CESL_CRIT" in ''|*[!0-9]*) CESL_CRIT=90 ;; esac
+case "$CESL_BAR_WIDTH" in ''|0|*[!0-9]*) CESL_BAR_WIDTH=10 ;; esac
+case "$CESL_CACHE_TTL" in ''|*[!0-9]*) CESL_CACHE_TTL=60 ;; esac
 
 # ── Glyphs ──────────────────────────────────────────────────────────
 case "$CESL_GLYPHS" in
@@ -135,7 +153,7 @@ format_tokens() {
     if [ "$num" -ge 1000000 ]; then
         awk -v n="$num" 'BEGIN {printf "%.1fm", n / 1000000}'
     elif [ "$num" -ge 1000 ]; then
-        awk -v n="$num" 'BEGIN {printf "%.0fk", n / 1000}'
+        awk -v n="$num" 'BEGIN {printf "%dk", n / 1000}'
     else
         printf "%d" "$num"
     fi
@@ -160,7 +178,23 @@ iso_to_epoch() {
     stripped="${stripped%%+*}"
     stripped="${stripped%%-[0-9][0-9]:[0-9][0-9]}"
     epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
-    if [ -n "$epoch" ]; then printf '%s' "$epoch"; return 0; fi
+    if [ -n "$epoch" ]; then
+        # BSD fallback parsed as UTC; re-apply an explicit UTC offset if present
+        local suf off
+        suf=$(printf '%s' "$iso_str" | tail -c 6)
+        case "$suf" in
+            +[0-9][0-9]:[0-9][0-9])
+                off=$(( 10#${suf:1:2} * 3600 + 10#${suf:4:2} * 60 ))
+                epoch=$(( epoch - off ))
+                ;;
+            -[0-9][0-9]:[0-9][0-9])
+                off=$(( 10#${suf:1:2} * 3600 + 10#${suf:4:2} * 60 ))
+                epoch=$(( epoch + off ))
+                ;;
+        esac
+        printf '%s' "$epoch"
+        return 0
+    fi
     return 1
 }
 
@@ -191,30 +225,36 @@ fmt_reset_any() { # style value(epoch-seconds or ISO-8601)
 
 # ── Extract stdin fields (single jq; sentinel keeps TSV aligned) ────
 read_json=$(printf '%s' "$input" | jq -r '[
-    (.model.display_name // "Claude"),
-    (.model.id // ""),
-    (.cwd // "-"),
-    (.version // "2.1.34"),
-    (.output_style.name // "default"),
-    (.cost.total_cost_usd // "-" | tostring),
-    (.cost.total_duration_ms // "-" | tostring),
-    (.cost.total_lines_added // "-" | tostring),
-    (.cost.total_lines_removed // "-" | tostring),
-    (.context_window.context_window_size // 200000 | tostring),
-    (.context_window.current_usage.input_tokens // 0 | tostring),
-    (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
-    (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
-    (.exceeds_200k_tokens // false | tostring),
-    ((.effort.level? // "") | tostring),
-    (.fast_mode // false | tostring),
-    ((.thinking.enabled? // false) | tostring),
-    ((.vim.mode? // "") | tostring),
-    ((.agent? | if type=="object" then (.name // "") elif type=="string" then . else "" end) // ""),
-    ((.rate_limits.five_hour.used_percentage? // .rate_limits.five_hour.utilization? // "") | tostring),
-    ((.rate_limits.five_hour.resets_at? // "") | tostring),
-    ((.rate_limits.seven_day.used_percentage? // .rate_limits.seven_day.utilization? // "") | tostring),
-    ((.rate_limits.seven_day.resets_at? // "") | tostring)
+    ((.model.display_name)? // "Claude"),
+    ((.model.id)? // ""),
+    ((.cwd)? // "-"),
+    ((.version)? // "2.1.34"),
+    ((.output_style.name)? // "default"),
+    (((.cost.total_cost_usd)? // "-") | tostring),
+    (((.cost.total_duration_ms)? // "-") | tostring),
+    (((.cost.total_lines_added)? // "-") | tostring),
+    (((.cost.total_lines_removed)? // "-") | tostring),
+    (((.context_window.context_window_size)? // 200000) | tostring),
+    (((.context_window.current_usage.input_tokens)? // 0) | tostring),
+    (((.context_window.current_usage.cache_creation_input_tokens)? // 0) | tostring),
+    (((.context_window.current_usage.cache_read_input_tokens)? // 0) | tostring),
+    (((.exceeds_200k_tokens)? // false) | tostring),
+    (((.effort.level)? // "") | tostring),
+    (((.fast_mode)? // false) | tostring),
+    (((.thinking.enabled)? // false) | tostring),
+    (((.vim.mode)? // "") | tostring),
+    (((.agent | if type=="object" then (.name // "") elif type=="string" then . else "" end))? // ""),
+    (((.rate_limits.five_hour.used_percentage)? // (.rate_limits.five_hour.utilization)? // "") | tostring),
+    (((.rate_limits.five_hour.resets_at)? // "") | tostring),
+    (((.rate_limits.seven_day.used_percentage)? // (.rate_limits.seven_day.utilization)? // "") | tostring),
+    (((.rate_limits.seven_day.resets_at)? // "") | tostring)
 ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
+
+# Invalid/unparseable stdin must degrade to sentinels, never to empty fields
+# (empty fields would shift the read and fabricate 0% rate rows)
+if [ -z "$read_json" ]; then
+    read_json=$(printf 'Claude\t-\t-\t2.1.34\tdefault\t-\t-\t-\t-\t200000\t0\t0\t0\tfalse\t-\tfalse\tfalse\t-\t-\t-\t-\t-\t-')
+fi
 
 IFS=$'\t' read -r model_name model_id cwd cc_version output_style \
     cost_usd duration_ms lines_added lines_removed \
@@ -477,20 +517,38 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
     fi
 
     if $needs_refresh; then
-        token=$(get_oauth_token)
-        if [ -n "$token" ] && [ "$token" != "null" ]; then
-            response=$(curl -s --max-time 5 \
-                -H "Accept: application/json" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $token" \
-                -H "anthropic-beta: oauth-2025-04-20" \
-                -H "User-Agent: claude-code/${cc_version}" \
-                "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-            if [ -n "$response" ] && printf '%s' "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
-                usage_data="$response"
-                if [ -n "$cache_file" ]; then
-                    printf '%s\n' "$response" > "$cache_file.$$" && mv -f "$cache_file.$$" "$cache_file"
+        # Negative cache: after a failed fetch, back off for one TTL instead of
+        # paying token resolution + curl timeout on every render
+        fail_marker="$cache_dir/usage-fail"
+        skip_fetch=false
+        if [ -n "$cache_file" ] && [ -f "$fail_marker" ]; then
+            fm_mtime=$(stat -c %Y "$fail_marker" 2>/dev/null || stat -f %m "$fail_marker" 2>/dev/null)
+            now=$(date +%s)
+            [ $(( now - fm_mtime )) -lt "$CESL_CACHE_TTL" ] 2>/dev/null && skip_fetch=true
+        fi
+
+        if ! $skip_fetch; then
+            token=$(get_oauth_token)
+            if [ -n "$token" ] && [ "$token" != "null" ]; then
+                # Token goes to curl via stdin config, never on argv (procfs-visible)
+                response=$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -s --max-time 5 \
+                    -H "Accept: application/json" \
+                    -H "Content-Type: application/json" \
+                    -H "anthropic-beta: oauth-2025-04-20" \
+                    -H "User-Agent: claude-code/${cc_version}" \
+                    --config - \
+                    "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
+                if [ -n "$response" ] && printf '%s' "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
+                    usage_data="$response"
+                    if [ -n "$cache_file" ]; then
+                        printf '%s\n' "$response" > "$cache_file.$$" && mv -f "$cache_file.$$" "$cache_file"
+                        rm -f "$fail_marker" 2>/dev/null
+                    fi
+                elif [ -n "$cache_file" ]; then
+                    touch "$fail_marker" 2>/dev/null
                 fi
+            elif [ -n "$cache_file" ]; then
+                touch "$fail_marker" 2>/dev/null
             fi
         fi
         if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
@@ -533,12 +591,13 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
     if [ -n "$usage_data" ]; then
         # Per-model scoped weekly limits (undocumented limits[]; defensive)
         scoped=$(printf '%s' "$usage_data" | jq -r '
-            (.limits? // []) |
-            map(select((.kind? // "") == "weekly_scoped" and ((.is_active? // true) == true))) |
+            ((.limits)? // []) |
+            (if type == "array" then . else [] end) |
+            map(select(((.kind)? // "") == "weekly_scoped" and ((.is_active)? != false))) |
             .[] | [
-                ((.scope? // .group? // "model") | tostring),
-                ((.percent? // 0) | tostring),
-                ((.resets_at? // "-") | tostring)
+                (((.scope.model.display_name)? // (.scope.model.id)? // (.group)? // "model") | tostring),
+                (((.percent)? // 0) | tostring),
+                (((.resets_at)? // "-") | tostring)
             ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
         if [ -n "$scoped" ]; then
             while IFS=$'\t' read -r sc_label sc_pct sc_reset; do
@@ -550,10 +609,10 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
 
         # Extra usage (credits) — only when enabled
         read_extra=$(printf '%s' "$usage_data" | jq -r '[
-            (.extra_usage.is_enabled // false | tostring),
-            (.extra_usage.utilization // 0 | tostring),
-            (.extra_usage.used_credits // 0 | tostring),
-            (.extra_usage.monthly_limit // 0 | tostring)
+            (((.extra_usage.is_enabled)? // false) | tostring),
+            (((.extra_usage.utilization)? // 0) | tostring),
+            (((.extra_usage.used_credits)? // 0) | tostring),
+            (((.extra_usage.monthly_limit)? // 0) | tostring)
         ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
         IFS=$'\t' read -r extra_enabled extra_pct_raw extra_used_raw extra_limit_raw <<< "$read_extra"
 

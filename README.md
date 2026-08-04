@@ -12,24 +12,27 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 |---------|-------------|
 | **Model** | Short model name (e.g., `Opus 4.6` instead of `Claude Opus 4.6`) |
 | **Context** | Usage percentage + token counts (e.g., `12% (42k/200k)`) with color coding |
-| **Auto-compact warning** | Blinking `⚠` when context usage >= 80% |
+| **Auto-compact warning** | Steady bold `⚠` when context usage >= 80% |
 | **Directory** | Truncated to last 2 path components |
 | **Git branch** | Branch name with detailed status: staged (`S:2`), unstaged (`U:1`), untracked (`A:3`) |
 | **Git ahead/behind** | `⇡2⇣1` arrows showing commits ahead/behind upstream |
 | **Worktree** | `⎇wt` indicator when running inside a git worktree |
-| **Session cost** | `$X.XX` when cost data is available |
-| **Session duration** | `⏱ 5m`, `⏱ 1h30m`, etc. |
-| **Effort level** | `● high`, `◑ medium`, `◔ low` |
-| **Rate limits** | Visual `●○` progress bars for 5-hour, 7-day, and extra usage with reset times |
+| **Session cost** | `$X.XX` with configurable warn/critical thresholds and currency |
+| **Session duration** | `5m`, `1h30m`, etc. |
+| **Lines changed** | `+156/-23` cumulative lines added/removed |
+| **Effort level** | `● high`, `◑ medium`, `◔ low` (from the session itself) |
+| **Badges** | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+` |
+| **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times |
 
 ### Color coding
 
-All percentage-based segments use consistent color thresholds:
+One escalation scale drives every percentage-based segment (context, rate bars) — quiet when healthy, then:
 
-- **Green** — below 50%
-- **Orange** — 50-69%
-- **Yellow** — 70-89%
-- **Red** — 90%+
+- **Yellow** — ≥ 70% (`CESL_WARN`)
+- **Orange** — ≥ 80% (`CESL_HIGH`); context also gains a steady bold `⚠`
+- **Red** — ≥ 90% (`CESL_CRIT`)
+
+Session cost uses its own `CESL_COST_WARN`/`CESL_COST_CRIT` thresholds, and the model name is colored by model family (Opus, Sonnet, Haiku, Fable).
 
 ## Requirements
 

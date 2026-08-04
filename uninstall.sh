@@ -15,16 +15,30 @@ if [ -f "$DEST" ]; then
 fi
 
 # Restore backup if available
+restored=false
 if [ -f "${DEST}.bak" ]; then
     mv "${DEST}.bak" "$DEST"
+    restored=true
     echo "Restored previous statusline from backup"
 fi
 
-# Remove statusLine from settings
-if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
-    tmp=$(mktemp)
-    jq 'del(.statusLine)' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-    echo "Removed statusLine config from $SETTINGS"
+# Settings: keep the wiring when a previous script was restored (it lives at
+# the same path); otherwise remove the statusLine key — loudly on failure
+if $restored; then
+    echo "Kept statusLine wiring in $SETTINGS (points at the restored script)"
+elif [ -f "$SETTINGS" ]; then
+    if command -v jq >/dev/null 2>&1; then
+        tmp=$(mktemp)
+        if jq 'del(.statusLine)' "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
+            mv "$tmp" "$SETTINGS"
+            echo "Removed statusLine config from $SETTINGS"
+        else
+            rm -f "$tmp"
+            echo "Warning: could not update $SETTINGS — remove the statusLine key manually" >&2
+        fi
+    else
+        echo "Warning: jq not found — remove the statusLine key from $SETTINGS manually" >&2
+    fi
 fi
 
 # Remove the per-user usage cache
