@@ -1,6 +1,6 @@
 # Claude Epic Status Line
 
-A feature-rich status line for [Claude Code](https://code.claude.com) that displays model info, context usage, git status, rate limits, session cost, and more — all with color-coded segments.
+A feature-rich status line for [Claude Code](https://code.claude.com) that displays model info, context usage, git status, rate limits, session cost, and more — quiet when everything is healthy, loud exactly where something needs attention. Zero-config by default, deeply customizable when you want it (thresholds, palette, glyph sets, per-segment toggles).
 
 ## What it looks like
 
@@ -121,7 +121,7 @@ The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude 
 
 ## Platform support
 
-Works on Linux and macOS. Date formatting and credential resolution adapt automatically to the platform.
+Works on Linux and macOS (bash 3.2+, BSD or GNU userland). Date formatting and credential resolution adapt automatically to the platform. Git and keychain lookups are bounded to ~2 seconds — via `timeout(1)` where available, or a built-in fallback on stock macOS — so a huge repository can never freeze your status line.
 
 ## Support
 
