@@ -15,8 +15,9 @@ done
 
 # Validate settings.json BEFORE touching anything — install must never
 # replace the active statusline script and then fail on the settings step
-if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ] && ! jq -e 'type == "object"' "$SETTINGS" >/dev/null 2>&1; then
-    echo "Error: $SETTINGS is not a valid JSON object — fix it first, then re-run install.sh" >&2
+if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ] \
+   && ! jq -es 'length == 1 and (.[0] | type == "object")' "$SETTINGS" >/dev/null 2>&1; then
+    echo "Error: $SETTINGS is not a single JSON object — fix it first, then re-run install.sh" >&2
     exit 1
 fi
 

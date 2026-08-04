@@ -52,8 +52,15 @@ if ! $foreign; then
         if command -v jq >/dev/null 2>&1; then
             # Only delete the statusLine key if it still points at OUR script —
             # a foreign wiring installed after us is not ours to remove
-            cur=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null || true)
+            if ! jq empty "$SETTINGS" >/dev/null 2>&1; then
+                echo "Warning: $SETTINGS is not valid JSON — remove the statusLine key manually" >&2
+                cur="__invalid__"
+            else
+                cur=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null || true)
+            fi
             case "$cur" in
+                "__invalid__")
+                    ;; # already warned
                 "")
                     ;; # no statusLine key — nothing to do
                 *"$DEST"*)

@@ -562,7 +562,7 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
         cache_age=$(( now - cache_mtime ))
         cache_size=$(wc -c < "$cache_file" 2>/dev/null | tr -d '[:space:]')
         case "$cache_size" in ''|*[!0-9]*) cache_size=9999999 ;; esac
-        if [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && [ "$cache_size" -le 1048576 ] \
+        if [ "$cache_age" -ge 0 ] 2>/dev/null && [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && [ "$cache_size" -le 1048576 ] \
            && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
             needs_refresh=false
             usage_data=$(cat "$cache_file" 2>/dev/null)
@@ -634,8 +634,9 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             case "$stale_size" in ''|*[!0-9]*) stale_size=9999999 ;; esac
             stale_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
             now=$(date +%s)
+            stale_age=$(( now - ${stale_mtime:-0} ))
             if [ "$stale_size" -le 1048576 ] \
-               && [ $(( now - ${stale_mtime:-0} )) -lt 86400 ] 2>/dev/null \
+               && [ "$stale_age" -ge 0 ] 2>/dev/null && [ "$stale_age" -lt 86400 ] 2>/dev/null \
                && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
                 usage_data=$(cat "$cache_file" 2>/dev/null)
             fi
