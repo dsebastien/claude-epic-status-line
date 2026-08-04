@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code statusLine — colors, rate limits, session duration, cost, worktree
 set -f
+export LC_ALL=C
 
 input=$(cat)
 
@@ -34,6 +35,18 @@ format_tokens() {
     else
         printf "%d" "$num"
     fi
+}
+
+clamp_pct() {
+    local val=$1 int
+    case "$val" in
+        ''|null|*[!0-9.]*) printf "0"; return ;;
+    esac
+    int=$(printf "%.0f" "$val" 2>/dev/null) || int=0
+    case "$int" in ''|*[!0-9]*) int=0 ;; esac
+    [ "${#int}" -gt 3 ] && int=100
+    [ "$int" -gt 100 ] && int=100
+    printf "%d" "$int"
 }
 
 color_for_pct() {
@@ -81,7 +94,7 @@ iso_to_epoch() {
     stripped="${stripped%%Z}"
     stripped="${stripped%%+*}"
     stripped="${stripped%%-[0-9][0-9]:[0-9][0-9]}"
-    epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+    epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
     if [ -n "$epoch" ]; then
         echo "$epoch"
         return 0
@@ -92,7 +105,7 @@ iso_to_epoch() {
 format_reset_time() {
     local iso_str="$1"
     local style="$2"
-    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return
+    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] || [ "$iso_str" = "-" ] && return
 
     local epoch
     epoch=$(iso_to_epoch "$iso_str")
@@ -106,7 +119,7 @@ format_reset_time() {
             ;;
         datetime)
             result=$(date -d "@$epoch" +"%b %-d, %l:%M%P" 2>/dev/null | sed 's/  / /g; s/^ //; s/\.//g')
-            [ -z "$result" ] && result=$(date -j -r "$epoch" +"%b %-d, %l:%M%p" 2>/dev/null | sed 's/  / /g; s/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
+            [ -z "$result" ] && result=$(date -j -r "$epoch" +"%b %e, %l:%M%p" 2>/dev/null | sed 's/  / /g; s/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
             ;;
     esac
     printf "%s" "$result"
@@ -120,14 +133,19 @@ read_json=$(echo "$input" | jq -r '[
     (.context_window.current_usage.input_tokens // 0 | tostring),
     (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
     (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
-    (.session.start_time // ""),
-    (.session.cost // "" | tostring)
-] | @tsv')
+    (.cost.total_cost_usd // "" | tostring),
+    (.cost.total_duration_ms // "" | tostring),
+    (.version // "2.1.34")
+] | map(if . == "" then "-" else . end) | @tsv')
 
-IFS=$'\t' read -r model_name cwd size input_tokens cache_create cache_read session_start session_cost <<< "$read_json"
+IFS=$'\t' read -r model_name cwd size input_tokens cache_create cache_read cost_usd duration_ms cc_version <<< "$read_json"
 
-[ -z "$cwd" ] || [ "$cwd" = "null" ] && cwd=$(pwd)
-[ "$size" = "0" ] && size=200000
+[ -z "$cwd" ] || [ "$cwd" = "null" ] || [ "$cwd" = "-" ] && cwd=$(pwd)
+case "$size" in ''|0|*[!0-9]*) size=200000 ;; esac
+case "$input_tokens" in ''|*[!0-9]*) input_tokens=0 ;; esac
+case "$cache_create" in ''|*[!0-9]*) cache_create=0 ;; esac
+case "$cache_read" in ''|*[!0-9]*) cache_read=0 ;; esac
+case "$cc_version" in ''|*[!0-9.]*) cc_version="2.1.34" ;; esac
 
 current=$(( input_tokens + cache_create + cache_read ))
 
@@ -168,7 +186,11 @@ is_worktree=false
 if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null || git -C "$cwd" rev-parse --short HEAD 2>/dev/null)
 
-    porcelain=$(git -C "$cwd" status --porcelain 2>/dev/null)
+    if command -v timeout >/dev/null 2>&1; then
+        porcelain=$(timeout 2 git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)
+    else
+        porcelain=$(git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)
+    fi
     if [ -n "$porcelain" ]; then
         while IFS= read -r _line; do
             _x="${_line:0:1}"
@@ -196,11 +218,12 @@ fi
 
 # ── Session duration ────────────────────────────────────
 session_duration=""
-if [ -n "$session_start" ] && [ "$session_start" != "null" ] && [ "$session_start" != "" ]; then
-    start_epoch=$(iso_to_epoch "$session_start")
-    if [ -n "$start_epoch" ]; then
-        now_epoch=$(date +%s)
-        elapsed=$(( now_epoch - start_epoch ))
+case "$duration_ms" in
+    ''|null|*[!0-9.]*) ;;
+    *)
+        ms_int=${duration_ms%%.*}
+        case "$ms_int" in ''|*[!0-9]*) ms_int=0 ;; esac
+        elapsed=$(( ms_int / 1000 ))
         if [ "$elapsed" -ge 3600 ]; then
             session_duration="$(( elapsed / 3600 ))h$(( (elapsed % 3600) / 60 ))m"
         elif [ "$elapsed" -ge 60 ]; then
@@ -208,8 +231,8 @@ if [ -n "$session_start" ] && [ "$session_start" != "null" ] && [ "$session_star
         else
             session_duration="${elapsed}s"
         fi
-    fi
-fi
+        ;;
+esac
 
 # ── Effort level (from settings, single jq call) ───────
 effort="default"
@@ -244,10 +267,15 @@ if $is_worktree; then
     line1+=" ${magenta}⎇wt${reset}"
 fi
 
-# Session cost
-if [ -n "$session_cost" ] && [ "$session_cost" != "null" ] && [ "$session_cost" != "" ] && [ "$session_cost" != "0" ]; then
+# Session cost (cost.total_cost_usd)
+cost_fmt=""
+case "$cost_usd" in
+    ''|null|*[!0-9.]*) ;;
+    *) cost_fmt=$(printf "%.2f" "$cost_usd" 2>/dev/null) ;;
+esac
+if [ -n "$cost_fmt" ] && [ "$cost_fmt" != "0.00" ]; then
     line1+="${sep}"
-    line1+="${dim}\$${reset}${white}${session_cost}${reset}"
+    line1+="${dim}\$${reset}${white}${cost_fmt}${reset}"
 fi
 
 if [ -n "$session_duration" ]; then
@@ -310,9 +338,13 @@ get_oauth_token() {
 }
 
 # ── Fetch usage data (cached 60s) ───────────────────────
-cache_file="/tmp/claude/statusline-usage-cache.json"
+cache_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-statusline-$(id -u)"
+cache_file="$cache_dir/usage-cache.json"
 cache_max_age=60
-mkdir -p /tmp/claude
+mkdir -m 700 -p "$cache_dir" 2>/dev/null
+if [ ! -d "$cache_dir" ] || [ -L "$cache_dir" ] || [ ! -O "$cache_dir" ]; then
+    cache_file=""
+fi
 
 needs_refresh=true
 usage_data=""
@@ -321,7 +353,7 @@ if [ -f "$cache_file" ]; then
     cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
     now=$(date +%s)
     cache_age=$(( now - cache_mtime ))
-    if [ "$cache_age" -lt "$cache_max_age" ]; then
+    if [ "$cache_age" -lt "$cache_max_age" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
         needs_refresh=false
         usage_data=$(cat "$cache_file" 2>/dev/null)
     fi
@@ -335,14 +367,16 @@ if $needs_refresh; then
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $token" \
             -H "anthropic-beta: oauth-2025-04-20" \
-            -H "User-Agent: claude-code/2.1.34" \
+            -H "User-Agent: claude-code/${cc_version}" \
             "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
         if [ -n "$response" ] && echo "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
             usage_data="$response"
-            echo "$response" > "$cache_file"
+            if [ -n "$cache_file" ]; then
+                printf '%s\n' "$response" > "$cache_file.$$" && mv -f "$cache_file.$$" "$cache_file"
+            fi
         fi
     fi
-    if [ -z "$usage_data" ] && [ -f "$cache_file" ]; then
+    if [ -z "$usage_data" ] && [ -f "$cache_file" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
         usage_data=$(cat "$cache_file" 2>/dev/null)
     fi
 fi
@@ -362,11 +396,11 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         (.extra_usage.utilization // 0 | tostring),
         (.extra_usage.used_credits // 0 | tostring),
         (.extra_usage.monthly_limit // 0 | tostring)
-    ] | @tsv')
+    ] | map(if . == "" then "-" else . end) | @tsv')
 
     IFS=$'\t' read -r five_pct_raw five_reset_iso seven_pct_raw seven_reset_iso extra_enabled extra_pct_raw extra_used_raw extra_limit_raw <<< "$read_usage"
 
-    five_hour_pct=$(printf "%.0f" "$five_pct_raw" 2>/dev/null || echo "0")
+    five_hour_pct=$(clamp_pct "$five_pct_raw")
     five_hour_reset=$(format_reset_time "$five_reset_iso" "time")
     five_hour_bar=$(build_bar "$five_hour_pct" "$bar_width")
     five_hour_pct_color=$(color_for_pct "$five_hour_pct")
@@ -375,7 +409,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     rate_lines+="${white}current${reset} ${five_hour_bar} ${five_hour_pct_color}${five_hour_pct_fmt}%${reset}"
     [ -n "$five_hour_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${five_hour_reset}${reset}"
 
-    seven_day_pct=$(printf "%.0f" "$seven_pct_raw" 2>/dev/null || echo "0")
+    seven_day_pct=$(clamp_pct "$seven_pct_raw")
     seven_day_reset=$(format_reset_time "$seven_reset_iso" "datetime")
     seven_day_bar=$(build_bar "$seven_day_pct" "$bar_width")
     seven_day_pct_color=$(color_for_pct "$seven_day_pct")
@@ -385,14 +419,14 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     [ -n "$seven_day_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${seven_day_reset}${reset}"
 
     if [ "$extra_enabled" = "true" ]; then
-        extra_pct=$(printf "%.0f" "$extra_pct_raw" 2>/dev/null || echo "0")
-        extra_used=$(awk "BEGIN {printf \"%.2f\", $extra_used_raw / 100}")
-        extra_limit=$(awk "BEGIN {printf \"%.2f\", $extra_limit_raw / 100}")
+        extra_pct=$(clamp_pct "$extra_pct_raw")
+        extra_used=$(awk -v v="$extra_used_raw" 'BEGIN {printf "%.2f", v / 100}')
+        extra_limit=$(awk -v v="$extra_limit_raw" 'BEGIN {printf "%.2f", v / 100}')
         extra_bar=$(build_bar "$extra_pct" "$bar_width")
         extra_pct_color=$(color_for_pct "$extra_pct")
 
         extra_reset=$(date -d "$(date +%Y-%m-01) +1 month" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]')
-        [ -z "$extra_reset" ] && extra_reset=$(date -v+1m -v1d +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        [ -z "$extra_reset" ] && extra_reset=$(date -v+1m -v1d +"%b %e" 2>/dev/null | sed 's/  / /g' | tr '[:upper:]' '[:lower:]')
 
         rate_lines+="\n${white}extra${reset}   ${extra_bar} ${extra_pct_color}\$${extra_used}${dim}/${reset}${white}\$${extra_limit}${reset}"
         [ -n "$extra_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${extra_reset}${reset}"
