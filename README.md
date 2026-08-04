@@ -115,7 +115,7 @@ CESL_SHOW_GIT=0
 
 ## How it works
 
-The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, etc.). It parses everything in a single `jq` call for performance, then assembles the status line segments.
+The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, etc.). The stdin payload is parsed in a single `jq` call for performance (auxiliary data — cache validation, API enrichment — uses separate small jq invocations), then the status line segments are assembled.
 
 The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended). The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
 

@@ -88,6 +88,8 @@ case "$CESL_HIGH" in ''|*[!0-9]*) CESL_HIGH=80 ;; esac
 case "$CESL_CRIT" in ''|*[!0-9]*) CESL_CRIT=90 ;; esac
 case "$CESL_BAR_WIDTH" in ''|0|*[!0-9]*) CESL_BAR_WIDTH=10 ;; esac
 [ "${#CESL_BAR_WIDTH}" -gt 3 ] && CESL_BAR_WIDTH=10
+CESL_BAR_WIDTH=$(( 10#$CESL_BAR_WIDTH ))
+[ "$CESL_BAR_WIDTH" -eq 0 ] && CESL_BAR_WIDTH=10
 [ "$CESL_BAR_WIDTH" -gt 200 ] && CESL_BAR_WIDTH=200
 case "$CESL_CACHE_TTL" in ''|*[!0-9]*) CESL_CACHE_TTL=60 ;; esac
 [ "${#CESL_CACHE_TTL}" -gt 7 ] && CESL_CACHE_TTL=60
@@ -133,8 +135,26 @@ dot=" ${dim}${g_dot}${reset} "
 # strings — everything rendered goes through printf %b, which would otherwise
 # decode escape sequences (terminal injection via branch names, paths, API
 # labels, model names)
-sanitize() {
-    printf '%s' "$1" | tr -d '\000-\037\177' | tr '\\' '/'
+sanitize() { # string [max-length]
+    local s
+    s=$(printf '%s' "$1" | tr -d '\000-\037\177' | tr '\\' '/')
+    printf '%s' "${s:0:${2:-120}}"
+}
+
+# Bound any command to ~2s: timeout(1) when present (with a kill escalation),
+# else a portable background-kill emulation (stock macOS has no timeout)
+bounded2() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 "$@" 2>/dev/null
+    else
+        "$@" 2>/dev/null &
+        local gpid=$!
+        ( sleep 2; kill "$gpid" 2>/dev/null ) >/dev/null 2>&1 &
+        local kpid=$!
+        wait "$gpid" 2>/dev/null
+        kill "$kpid" 2>/dev/null
+        wait "$kpid" 2>/dev/null
+    fi
 }
 
 clamp_pct() {
@@ -227,10 +247,11 @@ fmt_epoch() { # style(time|day) epoch
 
 fmt_reset_any() { # style value(epoch-seconds or ISO-8601)
     local style=$1 val=$2 epoch=""
+    [ "${#val}" -gt 64 ] && return
     case "$val" in
         ''|-|null) return ;;
         *[!0-9]*) epoch=$(iso_to_epoch "$val") || return ;;
-        *) epoch=$val ;;
+        *) [ "${#val}" -le 12 ] && epoch=$(( 10#$val )) || return ;;
     esac
     [ -n "$epoch" ] && fmt_epoch "$style" "$epoch"
 }
@@ -287,15 +308,17 @@ case "$cache_read" in ''|*[!0-9]*) cache_read=0 ;; esac
 [ "${#cache_read}" -gt 12 ] && cache_read=0
 case "$cc_version" in ''|*[!0-9.]*) cc_version="2.1.34" ;; esac
 
-# Untrusted display strings
-model_name=$(sanitize "$model_name")
-output_style=$(sanitize "$output_style")
-effort_level=$(sanitize "$effort_level")
-vim_mode=$(sanitize "$vim_mode")
-agent_name=$(sanitize "$agent_name")
+# Untrusted display strings (sanitized + length-capped)
+model_name=$(sanitize "$model_name" 40)
+model_id=$(sanitize "$model_id" 64)
+output_style=$(sanitize "$output_style" 24)
+effort_level=$(sanitize "$effort_level" 10)
+vim_mode=$(sanitize "$vim_mode" 12)
+agent_name=$(sanitize "$agent_name" 40)
 
 current=$(( 10#$input_tokens + 10#$cache_create + 10#$cache_read ))
 size=$(( 10#$size ))
+[ "$size" -eq 0 ] && size=200000
 pct_used=$(( current * 100 / size ))
 used_fmt=$(format_tokens "$current")
 total_fmt=$(format_tokens "$size")
@@ -324,7 +347,7 @@ dir_display() {
         printf '%s' "${g_ellipsis}/${parts[$((count-2))]}/${parts[$((count-1))]}"
     fi
 }
-dirname_short=$(sanitize "$(dir_display "$cwd")")
+dirname_short=$(sanitize "$(dir_display "$cwd")" 80)
 
 # ── Git: branch, counts, ahead/behind, worktree ─────────────────────
 git_branch=""
@@ -334,27 +357,11 @@ git_untracked=0
 git_remote_status=""
 is_worktree=false
 
-# Bounded git status: uses timeout(1) when present, else a portable
-# background-kill emulation (stock macOS has no timeout)
-git_porcelain() {
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 2 git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null
-    else
-        git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null &
-        local gpid=$!
-        ( sleep 2; kill "$gpid" 2>/dev/null ) >/dev/null 2>&1 &
-        local kpid=$!
-        wait "$gpid" 2>/dev/null
-        kill "$kpid" 2>/dev/null
-        wait "$kpid" 2>/dev/null
-    fi
-}
-
 if [ "$CESL_SHOW_GIT" = "1" ] && git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null || git -C "$cwd" rev-parse --short HEAD 2>/dev/null)
-    git_branch=$(sanitize "$git_branch")
+    git_branch=$(sanitize "$git_branch" 64)
 
-    porcelain=$(git_porcelain)
+    porcelain=$(bounded2 git -C "$cwd" --no-optional-locks status --porcelain)
     if [ -n "$porcelain" ]; then
         while IFS= read -r _line; do
             _x="${_line:0:1}"
@@ -368,7 +375,7 @@ if [ "$CESL_SHOW_GIT" = "1" ] && git -C "$cwd" rev-parse --is-inside-work-tree >
         done <<< "$porcelain"
     fi
 
-    read -r behind ahead < <(git -C "$cwd" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+    read -r behind ahead < <(bounded2 git -C "$cwd" rev-list --left-right --count "@{upstream}...HEAD" || echo "0 0")
     [ "$ahead" -gt 0 ] 2>/dev/null && git_remote_status+="${g_ahead}${ahead}"
     [ "$behind" -gt 0 ] 2>/dev/null && git_remote_status+="${g_behind}${behind}"
 
@@ -401,6 +408,7 @@ esac
 # ── Session cost (converted, thresholded) ───────────────────────────
 cost_fmt=""
 cost_rgb=""
+[ "${#cost_usd}" -gt 20 ] && cost_usd="-"
 case "$cost_usd" in
     ''|-|null|*[!0-9.]*) ;;
     *)
@@ -511,7 +519,7 @@ get_oauth_token() {
     fi
     if command -v secret-tool >/dev/null 2>&1; then
         local blob token
-        blob=$(timeout 2 secret-tool lookup service "Claude Code-credentials" 2>/dev/null)
+        blob=$(bounded2 secret-tool lookup service "Claude Code-credentials")
         if [ -n "$blob" ]; then
             token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
             if [ -n "$token" ] && [ "$token" != "null" ]; then
@@ -522,7 +530,7 @@ get_oauth_token() {
     fi
     if command -v security >/dev/null 2>&1; then
         local blob token
-        blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+        blob=$(bounded2 security find-generic-password -s "Claude Code-credentials" -w)
         if [ -n "$blob" ]; then
             token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
             if [ -n "$token" ] && [ "$token" != "null" ]; then
@@ -552,7 +560,10 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
         cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
         now=$(date +%s)
         cache_age=$(( now - cache_mtime ))
-        if [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
+        cache_size=$(wc -c < "$cache_file" 2>/dev/null)
+        case "$cache_size" in ''|*[!0-9]*) cache_size=9999999 ;; esac
+        if [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && [ "$cache_size" -le 1048576 ] \
+           && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
             needs_refresh=false
             usage_data=$(cat "$cache_file" 2>/dev/null)
         fi
@@ -616,7 +627,9 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             fi
             [ -n "$lock_dir" ] && rmdir "$lock_dir" 2>/dev/null
         fi
-        if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
+        if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ] \
+           && [ "$(wc -c < "$cache_file" 2>/dev/null)" -le 1048576 ] 2>/dev/null \
+           && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
             usage_data=$(cat "$cache_file" 2>/dev/null)
         fi
     fi
@@ -688,7 +701,7 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             extra_rgb=$(state_rgb "$extra_pct")
             extra_val="\033[38;2;${extra_rgb}m${CESL_CURRENCY_SYMBOL}${extra_used}${reset}${dim}/${reset}${c_txt}${CESL_CURRENCY_SYMBOL}${extra_limit}${reset}"
             extra_reset=$(date -d "$(date +%Y-%m-01) +1 month" +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
-            [ -z "$extra_reset" ] && extra_reset=$(date -v+1m -v1d +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
+            [ -z "$extra_reset" ] && extra_reset=$(date -v1d -v+1m +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
             rate_row "extra" "$extra_pct" none "" "$extra_val"
             [ -n "$extra_reset" ] && rate_lines+=" ${dim}${g_reset}${reset} ${c_txt}${extra_reset}${reset}"
         fi
@@ -701,7 +714,11 @@ if [ "$mode" = "explain" ]; then
     echo
     echo "== raw stdin =="
     if [ -n "$input" ]; then
-        printf '%s' "$input" | jq . 2>/dev/null || printf '%s\n(not valid JSON)\n' "$input"
+        if ! printf '%s' "$input" | jq . 2>/dev/null; then
+            # keep newlines/tabs, strip every other control char (terminal safety)
+            printf '%s' "$input" | tr -d '\000-\010\013-\037\177'
+            printf '\n(not valid JSON)\n'
+        fi
     else
         echo "(empty — pipe the statusline JSON in: cat sample.json | ./statusline.sh explain)"
     fi
@@ -709,7 +726,7 @@ if [ "$mode" = "explain" ]; then
     echo "== parsed =="
     echo "model:        $model_name (id: $model_id, family rgb: $model_rgb)"
     echo "version:      $cc_version"
-    echo "cwd:          $cwd"
+    echo "cwd:          $(sanitize "$cwd" 200)"
     echo "context:      $current/$size tokens ($pct_used%), exceeds_200k=$exceeds_200k"
     echo "cost:         raw=$cost_usd display=${cost_fmt:-n/a} ${CESL_CURRENCY_SYMBOL} (rate $CESL_CURRENCY_RATE)"
     echo "duration:     raw_ms=$duration_ms display=${session_duration:-n/a}"
@@ -717,7 +734,7 @@ if [ "$mode" = "explain" ]; then
     echo "effort:       $effort_level | fast: $fast_mode | thinking: $thinking_on | vim: $vim_mode"
     echo "output_style: $output_style | agent: $agent_name"
     echo "git:          branch=${git_branch:-n/a} S=$git_staged U=$git_unstaged A=$git_untracked remote=$git_remote_status worktree=$is_worktree"
-    echo "stdin limits: 5h=$sl_five_pct% reset=$sl_five_reset | 7d=$sl_seven_pct% reset=$sl_seven_reset"
+    echo "stdin limits: 5h=$(sanitize "$sl_five_pct" 20)% reset=$(sanitize "$sl_five_reset" 40) | 7d=$(sanitize "$sl_seven_pct" 20)% reset=$(sanitize "$sl_seven_reset" 40)"
     echo
     echo "== usage api =="
     if [ -n "$usage_data" ]; then

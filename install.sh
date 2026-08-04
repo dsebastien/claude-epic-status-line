@@ -13,6 +13,13 @@ for cmd in jq curl git; do
     fi
 done
 
+# Validate settings.json BEFORE touching anything — install must never
+# replace the active statusline script and then fail on the settings step
+if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ] && ! jq empty "$SETTINGS" >/dev/null 2>&1; then
+    echo "Error: $SETTINGS is not valid JSON — fix it first, then re-run install.sh" >&2
+    exit 1
+fi
+
 mkdir -p "$HOME/.claude"
 
 # Backup an existing statusline script — but never overwrite an earlier
@@ -114,7 +121,8 @@ if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ]; then
     if jq --arg dest "$DEST" \
         '. + {statusLine: {type: "command", command: ("bash " + ($dest | @sh))}}' \
         "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
-        mv "$tmp" "$SETTINGS"
+        # cp (not mv) so a symlinked settings.json keeps pointing at its target
+        cp "$tmp" "$SETTINGS" && rm -f "$tmp"
         echo "Updated $SETTINGS with statusLine config"
     else
         rm -f "$tmp"
