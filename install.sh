@@ -15,8 +15,8 @@ done
 
 # Validate settings.json BEFORE touching anything — install must never
 # replace the active statusline script and then fail on the settings step
-if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ] && ! jq empty "$SETTINGS" >/dev/null 2>&1; then
-    echo "Error: $SETTINGS is not valid JSON — fix it first, then re-run install.sh" >&2
+if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ] && ! jq -e 'type == "object"' "$SETTINGS" >/dev/null 2>&1; then
+    echo "Error: $SETTINGS is not a valid JSON object — fix it first, then re-run install.sh" >&2
     exit 1
 fi
 
@@ -31,7 +31,9 @@ if [ -f "$DEST" ] && [ ! -f "${DEST}.bak" ] \
     echo "Backed up existing statusline to ${DEST}.bak"
 fi
 
-# Copy script
+# Copy script — break a symlinked destination first so we never overwrite a
+# foreign symlink target through it
+[ -L "$DEST" ] && rm -f "$DEST"
 cp "$SCRIPT_DIR/statusline.sh" "$DEST"
 chmod +x "$DEST"
 echo "Installed statusline script to $DEST"

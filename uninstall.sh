@@ -50,14 +50,26 @@ if ! $foreign; then
         echo "Kept statusLine wiring in $SETTINGS (points at the restored script)"
     elif [ -f "$SETTINGS" ]; then
         if command -v jq >/dev/null 2>&1; then
-            tmp=$(mktemp)
-            if jq 'del(.statusLine)' "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
-                cp "$tmp" "$SETTINGS" && rm -f "$tmp"
-                echo "Removed statusLine config from $SETTINGS"
-            else
-                rm -f "$tmp"
-                echo "Warning: could not update $SETTINGS — remove the statusLine key manually" >&2
-            fi
+            # Only delete the statusLine key if it still points at OUR script —
+            # a foreign wiring installed after us is not ours to remove
+            cur=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null || true)
+            case "$cur" in
+                "")
+                    ;; # no statusLine key — nothing to do
+                *"$DEST"*)
+                    tmp=$(mktemp)
+                    if jq 'del(.statusLine)' "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
+                        cp "$tmp" "$SETTINGS" && rm -f "$tmp"
+                        echo "Removed statusLine config from $SETTINGS"
+                    else
+                        rm -f "$tmp"
+                        echo "Warning: could not update $SETTINGS — remove the statusLine key manually" >&2
+                    fi
+                    ;;
+                *)
+                    echo "Kept statusLine in $SETTINGS (it no longer points at this tool)"
+                    ;;
+            esac
         else
             echo "Warning: jq not found — remove the statusLine key from $SETTINGS manually" >&2
         fi

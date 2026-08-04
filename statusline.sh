@@ -560,7 +560,7 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
         cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
         now=$(date +%s)
         cache_age=$(( now - cache_mtime ))
-        cache_size=$(wc -c < "$cache_file" 2>/dev/null)
+        cache_size=$(wc -c < "$cache_file" 2>/dev/null | tr -d '[:space:]')
         case "$cache_size" in ''|*[!0-9]*) cache_size=9999999 ;; esac
         if [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && [ "$cache_size" -le 1048576 ] \
            && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
@@ -627,10 +627,18 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             fi
             [ -n "$lock_dir" ] && rmdir "$lock_dir" 2>/dev/null
         fi
-        if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ] \
-           && [ "$(wc -c < "$cache_file" 2>/dev/null)" -le 1048576 ] 2>/dev/null \
-           && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
-            usage_data=$(cat "$cache_file" 2>/dev/null)
+        # Stale-cache grace is bounded: reuse at most 24h-old data after a
+        # failed refresh, never indefinitely (token removed, API gone)
+        if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ]; then
+            stale_size=$(wc -c < "$cache_file" 2>/dev/null | tr -d '[:space:]')
+            case "$stale_size" in ''|*[!0-9]*) stale_size=9999999 ;; esac
+            stale_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
+            now=$(date +%s)
+            if [ "$stale_size" -le 1048576 ] \
+               && [ $(( now - ${stale_mtime:-0} )) -lt 86400 ] 2>/dev/null \
+               && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
+                usage_data=$(cat "$cache_file" 2>/dev/null)
+            fi
         fi
     fi
 fi
