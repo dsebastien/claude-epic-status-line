@@ -98,33 +98,39 @@ CFGEOF
     echo "Scaffolded config at $CONFIG_FILE (all knobs commented out at defaults)"
 fi
 
-# Update settings.json
+# Update settings.json (jq @sh shell-quotes the path robustly — spaces,
+# quotes, and backticks in $HOME all survive)
+STATUSLINE_BAK="$HOME/.claude/statusline-settings.bak.json"
 if [ -f "$SETTINGS" ] && [ -s "$SETTINGS" ]; then
+    # Preserve a pre-existing foreign statusLine value so uninstall can restore it
+    prev=$(jq -c '.statusLine // empty' "$SETTINGS" 2>/dev/null || true)
+    if [ -n "$prev" ] && [ ! -f "$STATUSLINE_BAK" ] \
+       && ! printf '%s' "$prev" | grep -qF "$DEST"; then
+        printf '%s\n' "$prev" > "$STATUSLINE_BAK"
+        echo "Saved previous statusLine setting to $STATUSLINE_BAK"
+    fi
     # Merge statusLine into existing settings; fail loudly on invalid JSON
     tmp=$(mktemp)
     if jq --arg dest "$DEST" \
-        '. + {statusLine: {type: "command", command: ("bash \"" + $dest + "\"")}}' \
+        '. + {statusLine: {type: "command", command: ("bash " + ($dest | @sh))}}' \
         "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
         mv "$tmp" "$SETTINGS"
         echo "Updated $SETTINGS with statusLine config"
     else
         rm -f "$tmp"
         echo "Error: could not update $SETTINGS (invalid JSON?)." >&2
-        echo "Fix the file, or add this key manually:" >&2
-        echo "  \"statusLine\": {\"type\": \"command\", \"command\": \"bash \\\"$DEST\\\"\"}" >&2
+        echo "Fix the file, then re-run install.sh." >&2
         exit 1
     fi
 else
     # Create new settings file
-    cat > "$SETTINGS" <<EOF
-{
-  "statusLine": {
-    "type": "command",
-    "command": "bash \"$DEST\""
-  }
-}
-EOF
-    echo "Created $SETTINGS with statusLine config"
+    if jq -n --arg dest "$DEST" \
+        '{statusLine: {type: "command", command: ("bash " + ($dest | @sh))}}' > "$SETTINGS"; then
+        echo "Created $SETTINGS with statusLine config"
+    else
+        echo "Error: could not create $SETTINGS" >&2
+        exit 1
+    fi
 fi
 
 echo ""

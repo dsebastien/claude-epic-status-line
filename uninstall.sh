@@ -22,9 +22,21 @@ if [ -f "${DEST}.bak" ]; then
     echo "Restored previous statusline from backup"
 fi
 
-# Settings: keep the wiring when a previous script was restored (it lives at
-# the same path); otherwise remove the statusLine key — loudly on failure
-if $restored; then
+# Settings: restore a saved foreign statusLine value if install preserved one;
+# else keep the wiring when a previous script was restored (same path);
+# otherwise remove the statusLine key — loudly on failure
+STATUSLINE_BAK="$HOME/.claude/statusline-settings.bak.json"
+if [ -f "$STATUSLINE_BAK" ] && [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+    tmp=$(mktemp)
+    if jq --slurpfile p "$STATUSLINE_BAK" '.statusLine = $p[0]' "$SETTINGS" > "$tmp" && [ -s "$tmp" ]; then
+        mv "$tmp" "$SETTINGS"
+        rm -f "$STATUSLINE_BAK"
+        echo "Restored previous statusLine setting in $SETTINGS"
+    else
+        rm -f "$tmp"
+        echo "Warning: could not restore $STATUSLINE_BAK into $SETTINGS — merge it manually" >&2
+    fi
+elif $restored; then
     echo "Kept statusLine wiring in $SETTINGS (points at the restored script)"
 elif [ -f "$SETTINGS" ]; then
     if command -v jq >/dev/null 2>&1; then

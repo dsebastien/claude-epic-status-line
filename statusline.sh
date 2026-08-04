@@ -19,7 +19,7 @@ mode="${1:-}"
 if [ -t 0 ]; then
     input=""
 else
-    input=$(cat)
+    input=$(head -c 1048576)
 fi
 
 if [ -z "$input" ] && [ "$mode" != "explain" ]; then
@@ -87,7 +87,11 @@ case "$CESL_WARN" in ''|*[!0-9]*) CESL_WARN=70 ;; esac
 case "$CESL_HIGH" in ''|*[!0-9]*) CESL_HIGH=80 ;; esac
 case "$CESL_CRIT" in ''|*[!0-9]*) CESL_CRIT=90 ;; esac
 case "$CESL_BAR_WIDTH" in ''|0|*[!0-9]*) CESL_BAR_WIDTH=10 ;; esac
+[ "${#CESL_BAR_WIDTH}" -gt 3 ] && CESL_BAR_WIDTH=10
+[ "$CESL_BAR_WIDTH" -gt 200 ] && CESL_BAR_WIDTH=200
 case "$CESL_CACHE_TTL" in ''|*[!0-9]*) CESL_CACHE_TTL=60 ;; esac
+[ "${#CESL_CACHE_TTL}" -gt 7 ] && CESL_CACHE_TTL=60
+CESL_WARN=$(( 10#$CESL_WARN )); CESL_HIGH=$(( 10#$CESL_HIGH )); CESL_CRIT=$(( 10#$CESL_CRIT ))
 
 # ── Glyphs ──────────────────────────────────────────────────────────
 case "$CESL_GLYPHS" in
@@ -125,6 +129,14 @@ sep=" ${dim}${g_sep}${reset} "
 dot=" ${dim}${g_dot}${reset} "
 
 # ── Helpers ─────────────────────────────────────────────────────────
+# Strip control characters and neutralize backslashes in untrusted display
+# strings — everything rendered goes through printf %b, which would otherwise
+# decode escape sequences (terminal injection via branch names, paths, API
+# labels, model names)
+sanitize() {
+    printf '%s' "$1" | tr -d '\000-\037\177' | tr '\\' '/'
+}
+
 clamp_pct() {
     local val=$1 int
     case "$val" in
@@ -263,13 +275,27 @@ IFS=$'\t' read -r model_name model_id cwd cc_version output_style \
     sl_five_pct sl_five_reset sl_seven_pct sl_seven_reset <<< "$read_json"
 
 [ -z "$cwd" ] || [ "$cwd" = "null" ] || [ "$cwd" = "-" ] && cwd=$(pwd)
+# Digits-only + length caps + base-10 forcing: leading zeros must not trip
+# octal parsing, oversized values must not overflow into negatives
 case "$size" in ''|0|*[!0-9]*) size=200000 ;; esac
+[ "${#size}" -gt 12 ] && size=200000
 case "$input_tokens" in ''|*[!0-9]*) input_tokens=0 ;; esac
+[ "${#input_tokens}" -gt 12 ] && input_tokens=0
 case "$cache_create" in ''|*[!0-9]*) cache_create=0 ;; esac
+[ "${#cache_create}" -gt 12 ] && cache_create=0
 case "$cache_read" in ''|*[!0-9]*) cache_read=0 ;; esac
+[ "${#cache_read}" -gt 12 ] && cache_read=0
 case "$cc_version" in ''|*[!0-9.]*) cc_version="2.1.34" ;; esac
 
-current=$(( input_tokens + cache_create + cache_read ))
+# Untrusted display strings
+model_name=$(sanitize "$model_name")
+output_style=$(sanitize "$output_style")
+effort_level=$(sanitize "$effort_level")
+vim_mode=$(sanitize "$vim_mode")
+agent_name=$(sanitize "$agent_name")
+
+current=$(( 10#$input_tokens + 10#$cache_create + 10#$cache_read ))
+size=$(( 10#$size ))
 pct_used=$(( current * 100 / size ))
 used_fmt=$(format_tokens "$current")
 total_fmt=$(format_tokens "$size")
@@ -298,7 +324,7 @@ dir_display() {
         printf '%s' "${g_ellipsis}/${parts[$((count-2))]}/${parts[$((count-1))]}"
     fi
 }
-dirname_short=$(dir_display "$cwd")
+dirname_short=$(sanitize "$(dir_display "$cwd")")
 
 # ── Git: branch, counts, ahead/behind, worktree ─────────────────────
 git_branch=""
@@ -308,14 +334,27 @@ git_untracked=0
 git_remote_status=""
 is_worktree=false
 
+# Bounded git status: uses timeout(1) when present, else a portable
+# background-kill emulation (stock macOS has no timeout)
+git_porcelain() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null
+    else
+        git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null &
+        local gpid=$!
+        ( sleep 2; kill "$gpid" 2>/dev/null ) >/dev/null 2>&1 &
+        local kpid=$!
+        wait "$gpid" 2>/dev/null
+        kill "$kpid" 2>/dev/null
+        wait "$kpid" 2>/dev/null
+    fi
+}
+
 if [ "$CESL_SHOW_GIT" = "1" ] && git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null || git -C "$cwd" rev-parse --short HEAD 2>/dev/null)
+    git_branch=$(sanitize "$git_branch")
 
-    if command -v timeout >/dev/null 2>&1; then
-        porcelain=$(timeout 2 git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)
-    else
-        porcelain=$(git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)
-    fi
+    porcelain=$(git_porcelain)
     if [ -n "$porcelain" ]; then
         while IFS= read -r _line; do
             _x="${_line:0:1}"
@@ -347,7 +386,8 @@ case "$duration_ms" in
     *)
         ms_int=${duration_ms%%.*}
         case "$ms_int" in ''|*[!0-9]*) ms_int=0 ;; esac
-        elapsed=$(( ms_int / 1000 ))
+        [ "${#ms_int}" -gt 15 ] && ms_int=0
+        elapsed=$(( 10#$ms_int / 1000 ))
         if [ "$elapsed" -ge 3600 ]; then
             session_duration="$(( elapsed / 3600 ))h$(( (elapsed % 3600) / 60 ))m"
         elif [ "$elapsed" -ge 60 ]; then
@@ -428,8 +468,8 @@ fi
 
 if [ "$CESL_SHOW_LINES" = "1" ]; then
     la="" ; lr=""
-    case "$lines_added"   in ''|-|null|*[!0-9]*) ;; 0) ;; *) la=$lines_added ;; esac
-    case "$lines_removed" in ''|-|null|*[!0-9]*) ;; 0) ;; *) lr=$lines_removed ;; esac
+    case "$lines_added"   in ''|-|null|*[!0-9]*) ;; 0) ;; *) [ "${#lines_added}" -le 9 ] && la=$lines_added ;; esac
+    case "$lines_removed" in ''|-|null|*[!0-9]*) ;; 0) ;; *) [ "${#lines_removed}" -le 9 ] && lr=$lines_removed ;; esac
     if [ -n "$la" ] || [ -n "$lr" ]; then
         madd "${dim}+${la:-0}/-${lr:-0}${reset}"
     fi
@@ -503,6 +543,8 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
     mkdir -m 700 -p "$cache_dir" 2>/dev/null
     if [ ! -d "$cache_dir" ] || [ -L "$cache_dir" ] || [ ! -O "$cache_dir" ]; then
         cache_file=""
+    else
+        chmod 700 "$cache_dir" 2>/dev/null
     fi
 
     needs_refresh=true
@@ -527,11 +569,33 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             [ $(( now - fm_mtime )) -lt "$CESL_CACHE_TTL" ] 2>/dev/null && skip_fetch=true
         fi
 
+        # Single-flight lock: concurrent sessions must not stampede the API
+        # when the shared cache expires (stale locks broken after 30s)
+        lock_dir=""
+        if ! $skip_fetch && [ -n "$cache_file" ]; then
+            lock_dir="$cache_dir/fetch.lock"
+            if ! mkdir "$lock_dir" 2>/dev/null; then
+                l_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null || stat -f %m "$lock_dir" 2>/dev/null)
+                now=$(date +%s)
+                if [ $(( now - ${l_mtime:-0} )) -gt 30 ] 2>/dev/null; then
+                    rm -rf "$lock_dir" 2>/dev/null
+                    mkdir "$lock_dir" 2>/dev/null || { skip_fetch=true; lock_dir=""; }
+                else
+                    skip_fetch=true
+                    lock_dir=""
+                fi
+            fi
+        fi
+
         if ! $skip_fetch; then
             token=$(get_oauth_token)
+            # OAuth tokens are URL-safe strings; anything else could inject
+            # directives into the curl config below — refuse it
+            case "$token" in *[!A-Za-z0-9._~+/=-]*) token="" ;; esac
             if [ -n "$token" ] && [ "$token" != "null" ]; then
                 # Token goes to curl via stdin config, never on argv (procfs-visible)
                 response=$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -s --max-time 5 \
+                    --max-filesize 1048576 \
                     -H "Accept: application/json" \
                     -H "Content-Type: application/json" \
                     -H "anthropic-beta: oauth-2025-04-20" \
@@ -550,6 +614,7 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
             elif [ -n "$cache_file" ]; then
                 touch "$fail_marker" 2>/dev/null
             fi
+            [ -n "$lock_dir" ] && rmdir "$lock_dir" 2>/dev/null
         fi
         if [ -z "$usage_data" ] && [ -n "$cache_file" ] && [ -f "$cache_file" ] && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
             usage_data=$(cat "$cache_file" 2>/dev/null)
@@ -598,11 +663,11 @@ if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
                 (((.scope.model.display_name)? // (.scope.model.id)? // (.group)? // "model") | tostring),
                 (((.percent)? // 0) | tostring),
                 (((.resets_at)? // "-") | tostring)
-            ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
+            ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null | head -n 8)
         if [ -n "$scoped" ]; then
             while IFS=$'\t' read -r sc_label sc_pct sc_reset; do
                 [ -z "$sc_label" ] || [ "$sc_label" = "-" ] && continue
-                sc_label=$(printf '%s' "$sc_label" | tr 'A-Z' 'a-z')
+                sc_label=$(sanitize "$sc_label" | tr 'A-Z' 'a-z')
                 rate_row "$sc_label" "$(clamp_pct "$sc_pct")" day "$sc_reset"
             done <<< "$scoped"
         fi

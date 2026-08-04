@@ -59,7 +59,7 @@ bash install.sh
 {
   "statusLine": {
     "type": "command",
-    "command": "bash /home/YOUR_USER/.claude/statusline-command.sh"
+    "command": "bash '/home/YOUR_USER/.claude/statusline-command.sh'"
   }
 }
 ```
@@ -104,6 +104,7 @@ CESL_GLYPHS=ascii
 
 ```bash
 # Quiet mode — just model, context, and rate limits
+CESL_SHOW_DIR=0
 CESL_SHOW_COST=0
 CESL_SHOW_DURATION=0
 CESL_SHOW_LINES=0
