@@ -2,7 +2,17 @@
 
 A feature-rich status line for [Claude Code](https://code.claude.com) that displays model info, context usage, git status, rate limits, session cost, and more — quiet when everything is healthy, loud exactly where something needs attention. Zero-config by default, deeply customizable when you want it (thresholds, palette, glyph sets, per-segment toggles).
 
+📖 **[Full documentation](https://dsebastien.github.io/claude-epic-status-line/)** — [installation](https://dsebastien.github.io/claude-epic-status-line/install.html) · [usage](https://dsebastien.github.io/claude-epic-status-line/usage.html) · [configuration](https://dsebastien.github.io/claude-epic-status-line/configuration.html) · [tips](https://dsebastien.github.io/claude-epic-status-line/tips.html) · [troubleshooting](https://dsebastien.github.io/claude-epic-status-line/troubleshooting.html)
+
 ## What it looks like
+
+### Watch the 70-second tour
+
+[![Watch the Claude Epic Status Line video](docs/assets/claude-epic-status-line-poster.png)](docs/assets/claude-epic-status-line.mp4)
+
+*Click to play, or [watch it on the documentation site](https://dsebastien.github.io/claude-epic-status-line/#see-it-in-action).*
+
+### The status line itself
 
 ![Claude Epic Status Line screenshot](screenshot.png)
 
@@ -122,6 +132,20 @@ The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude 
 ## Platform support
 
 Works on Linux and macOS (bash 3.2+, BSD or GNU userland). Date formatting and credential resolution adapt automatically to the platform. Git and keychain lookups are bounded to ~2 seconds — via `timeout(1)` where available, or a built-in fallback on stock macOS — so a huge repository can never freeze your status line.
+
+## Documentation
+
+The full guide lives at **[dsebastien.github.io/claude-epic-status-line](https://dsebastien.github.io/claude-epic-status-line/)**, and its sources are in [`docs/`](docs/):
+
+| Page | Covers |
+|------|--------|
+| [Overview](docs/README.md) | What it is, the video, key features |
+| [Installation](docs/install.md) | Requirements, quick and manual install, upgrading, uninstalling |
+| [Usage](docs/usage.md) | Every segment explained, the rate-limit dashboard, the `explain` subcommand |
+| [Configuration](docs/configuration.md) | Every `CESL_*` knob with its default |
+| [Tips & best practices](docs/tips.md) | Theme recipes, threshold tuning, parallel sessions |
+| [Troubleshooting](docs/troubleshooting.md) | When something does not render |
+| [Release notes](docs/release-notes.md) | What changed, and breaking changes |
 
 ## Support
 

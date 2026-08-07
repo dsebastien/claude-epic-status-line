@@ -1,0 +1,24 @@
+{
+  "name": "cesl-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion promo video for Claude Epic Status Line",
+  "license": "MIT",
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion render Promo out/claude-epic-status-line.mp4",
+    "still": "remotion still Promo out/poster.png --frame=200",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.506",
+    "@remotion/google-fonts": "4.0.506",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.506"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "typescript": "5.8.2"
+  }
+}
