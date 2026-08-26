@@ -103,12 +103,12 @@ case "$CESL_GLYPHS" in
         g_eff_high="*" g_eff_med="o" g_eff_low="." g_branch=""
         ;;
     nerd)
-        g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠" g_reset="⟳"
+        g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
         g_dot="·"  g_ellipsis="…" g_ahead="⇡" g_behind="⇣" g_wt="⎇wt"
         g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=" "
         ;;
     *)
-        g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠" g_reset="⟳"
+        g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
         g_dot="·"  g_ellipsis="…" g_ahead="⇡" g_behind="⇣" g_wt="⎇wt"
         g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=""
         ;;
@@ -442,7 +442,7 @@ if [ "$CESL_SHOW_CONTEXT" = "1" ]; then
     else
         ctx="${c_txt}${pct_used}%${reset} ${dim}(${used_fmt}/${total_fmt})${reset}"
     fi
-    [ "$exceeds_200k" = "true" ] && ctx+=" ${alert}${g_warn}200k+${reset}"
+    [ "$exceeds_200k" = "true" ] && ctx+=" ${alert}${g_warn} 200k+${reset}"
     seg "$ctx"
 fi
 
