@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion render Promo out/claude-epic-status-line.mp4",
-    "still": "remotion still Promo out/poster.png --frame=200",
+    "still": "remotion still Promo out/poster.png --frame=260",
     "upgrade": "remotion upgrade"
   },
   "dependencies": {

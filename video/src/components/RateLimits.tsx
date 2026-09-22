@@ -7,6 +7,8 @@ export type LimitRow = {
   /** Text shown right of the bar. Defaults to `${pct}%`. */
   value?: string;
   reset: string;
+  /** Projected end-of-window utilization. Omit when the pace is fine. */
+  proj?: number;
   /** Fraction of the bar to draw, 0..1. Lets rows animate in one by one. */
   reveal?: number;
   highlight?: boolean;
@@ -71,6 +73,12 @@ export const RateLimits: React.FC<{
 
             <span style={{color, minWidth: 90}}>{r.value ?? `${r.pct}%`}</span>
             <span style={{color: c.faint}}>↺ {r.reset}</span>
+            {r.proj !== undefined ? (
+              <span style={{color: c.faint}}>
+                ⇢{' '}
+                <span style={{color: escalate(r.proj)}}>{r.proj}%</span>
+              </span>
+            ) : null}
           </div>
         );
       })}

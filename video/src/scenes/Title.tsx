@@ -41,7 +41,7 @@ export const Title: React.FC = () => {
             marginTop: 18,
           }}
         >
-          v2.0.0 — a status bar that answers your questions
+          v2.1.0 — a status bar that answers your questions
         </div>
       </div>
 

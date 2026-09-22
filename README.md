@@ -6,7 +6,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 
 ## What it looks like
 
-### Watch the 70-second tour
+### Watch the 90-second tour
 
 [![Watch the Claude Epic Status Line video](docs/assets/claude-epic-status-line-poster.png)](docs/assets/claude-epic-status-line.mp4)
 

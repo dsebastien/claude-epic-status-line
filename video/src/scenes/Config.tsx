@@ -15,10 +15,11 @@ export const Config: React.FC = () => (
         lines={[
           {text: '# every knob is optional — zero config works too', color: c.faint},
           {text: 'CESL_WARN=65                  # yellow kicks in earlier', color: c.text},
+          {text: 'CESL_CTX_HIGH=80000           # warn me sooner about turn cost', color: c.text},
           {text: 'CESL_COST_CRIT=15             # red past $15/session', color: c.text},
           {text: 'CESL_GLYPHS=nerd              # unicode | nerd | ascii', color: c.text},
-          {text: 'CESL_BAR_WIDTH=20', color: c.text},
-          {text: 'CESL_SHOW_COST=0', color: c.text},
+          {text: 'CESL_SHOW_EXTRA=0             # drop one row, keep the rest', color: c.text},
+          {text: 'CESL_SHOW_SCOPED=0            # ...and skip the API entirely', color: c.text},
           {text: "CESL_CURRENCY_SYMBOL='€'", color: c.text},
           {text: "CESL_COLOR_OPUS='180;140;255'", color: c.text},
         ]}
@@ -28,7 +29,7 @@ export const Config: React.FC = () => (
     <Caption
       delay={150}
       title="Make it yours — or change nothing at all"
-      body="Thresholds, palette, model hues, bar width, glyph sets, per-segment toggles, currency. Script defaults, then your config file, then CESL_* environment variables on top."
+      body="Thresholds, palette, model hues, bar width, glyph sets, per-segment and per-row toggles, NO_COLOR, currency. Script defaults, then your config file, then CESL_* environment variables on top."
     />
   </Scene>
 );

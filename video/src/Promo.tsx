@@ -6,6 +6,7 @@ import {Hook, HOOK_DURATION} from './scenes/Hook';
 import {Title, TITLE_DURATION} from './scenes/Title';
 import {Anatomy, ANATOMY_DURATION} from './scenes/Anatomy';
 import {Escalation, ESCALATION_DURATION} from './scenes/Escalation';
+import {Turn, TURN_DURATION} from './scenes/Turn';
 import {Dashboard, DASHBOARD_DURATION} from './scenes/Dashboard';
 import {Config, CONFIG_DURATION} from './scenes/Config';
 import {Install, INSTALL_DURATION} from './scenes/Install';
@@ -20,6 +21,7 @@ export const PROMO_DURATION =
   TITLE_DURATION +
   ANATOMY_DURATION +
   ESCALATION_DURATION +
+  TURN_DURATION +
   DASHBOARD_DURATION +
   CONFIG_DURATION +
   INSTALL_DURATION;
@@ -38,6 +40,9 @@ export const Promo: React.FC = () => (
       </Series.Sequence>
       <Series.Sequence durationInFrames={ESCALATION_DURATION}>
         <Escalation />
+      </Series.Sequence>
+      <Series.Sequence durationInFrames={TURN_DURATION}>
+        <Turn />
       </Series.Sequence>
       <Series.Sequence durationInFrames={DASHBOARD_DURATION}>
         <Dashboard />

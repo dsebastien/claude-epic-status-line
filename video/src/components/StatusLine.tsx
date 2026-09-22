@@ -1,7 +1,8 @@
 import React from 'react';
 import {c, escalate, FONT_MONO} from '../theme';
+import {WarnGlyph} from './WarnGlyph';
 
-export type SegmentId = 'model' | 'context' | 'git' | 'session' | 'effort';
+export type SegmentId = 'model' | 'context' | 'git' | 'session' | 'turn' | 'effort';
 
 export type StatusLineProps = {
   model: string;
@@ -18,6 +19,11 @@ export type StatusLineProps = {
   duration: string;
   added: number;
   removed: number;
+  /** Per-turn context cost, pre-formatted (e.g. '48k'). Omit to hide. */
+  turn?: string;
+  turnColor?: string;
+  /** API requests on this conversation so far. Omit to hide. */
+  turns?: number;
   effort: string;
   badges?: string[];
   /** When set, every other segment dims out so the eye lands on this one. */
@@ -44,10 +50,13 @@ export const StatusLine: React.FC<StatusLineProps> = ({
   duration,
   added,
   removed,
+  turn,
+  turnColor,
+  turns,
   effort,
   badges = [],
   focus = null,
-  fontSize = 24,
+  fontSize = 21,
 }) => {
   const op = (id: SegmentId): number => (focus === null || focus === id ? 1 : 0.22);
   const ctxColor = escalate(contextPct);
@@ -69,7 +78,11 @@ export const StatusLine: React.FC<StatusLineProps> = ({
       {SEP}
 
       <span style={{opacity: op('context')}}>
-        {warn ? <span style={{color: ctxColor, fontWeight: 700}}>⚠ </span> : null}
+        {warn ? (
+          <>
+            <WarnGlyph color={ctxColor} size={fontSize * 0.92} />{' '}
+          </>
+        ) : null}
         <span style={{color: ctxColor}}>{contextPct}%</span>
         <span style={{color: c.dim}}>
           {' '}
@@ -97,6 +110,19 @@ export const StatusLine: React.FC<StatusLineProps> = ({
           +{added}/-{removed}
         </span>
       </span>
+
+      {turn ? (
+        <span style={{opacity: op('turn')}}>
+          <span style={{color: c.faint}}> · </span>
+          <span style={{color: turnColor ?? c.dim}}>{turn}/turn</span>
+          {turns ? (
+            <>
+              <span style={{color: c.faint}}> · </span>
+              <span style={{color: c.dim}}>{turns}t</span>
+            </>
+          ) : null}
+        </span>
+      ) : null}
 
       <span style={{opacity: op('effort')}}>
         <span style={{color: c.faint}}> · </span>

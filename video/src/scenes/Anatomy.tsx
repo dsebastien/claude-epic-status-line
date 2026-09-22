@@ -31,6 +31,11 @@ const BEATS: {id: SegmentId; title: string; body: string}[] = [
     body: 'What this session has spent, how long you have been at it, and what it actually produced. Thresholds are yours to set.',
   },
   {
+    id: 'turn',
+    title: 'What a turn costs',
+    body: 'The whole context is re-sent on every turn, so 7.6k/turn is what the next message costs before you type. Thresholds here are absolute tokens, not a percentage.',
+  },
+  {
     id: 'effort',
     title: 'Effort and badges',
     body: 'Effort level, plus small markers for fast mode, thinking, a running subagent, or a non-default output style.',
