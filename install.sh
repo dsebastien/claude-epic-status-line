@@ -77,6 +77,18 @@ else
 ## Glyph set: unicode (default) | nerd | ascii
 #CESL_GLYPHS=unicode
 
+## Colour: auto (honours NO_COLOR and TERM=dumb) | 1 (always) | 0 (never)
+#CESL_COLOR=auto
+
+## Absolute context thresholds in tokens, for the per-turn cost and the hint
+## line. A percentage hides what a turn costs on a large window: 486k of a 1M
+## window reads as 49% full while re-sending 49k tokens every single turn.
+#CESL_CTX_WARN=60000
+#CESL_CTX_HIGH=120000
+
+## Share of the re-sent context billed each turn (the cache-read rate)
+#CESL_TURN_RATE=0.1
+
 ## Segment toggles (1 = shown, 0 = hidden)
 #CESL_SHOW_MODEL=1
 #CESL_SHOW_CONTEXT=1
@@ -85,9 +97,17 @@ else
 #CESL_SHOW_COST=1
 #CESL_SHOW_DURATION=1
 #CESL_SHOW_LINES=1
+#CESL_SHOW_TURN=1
 #CESL_SHOW_EFFORT=1
 #CESL_SHOW_BADGES=1
+#CESL_SHOW_HINT=1
+
+## Rate-limit dashboard. CESL_SHOW_RATE_BLOCK=0 hides all of it; the three
+## below switch individual rows, so you can drop one without losing the rest.
 #CESL_SHOW_RATE_BLOCK=1
+#CESL_SHOW_SCOPED=1
+#CESL_SHOW_EXTRA=1
+#CESL_SHOW_PROJECTION=1
 
 ## Palette
 #CESL_COLOR_TEXT='220;220;220'

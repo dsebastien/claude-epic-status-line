@@ -33,6 +33,14 @@ If none resolves, the rows are skipped deliberately — this is not an error sta
 
 Extra-usage credits only render when extra usage is actually enabled on your account.
 
+Also check `CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA`. With both set to `0` the API is never called at all, and `explain` says so on its `fetch needed:` line.
+
+## The pace projection never appears
+
+`⇢ NN%` is deliberately quiet. It is suppressed in the first tenth of a window, when the projected figure lands below `CESL_WARN`, and when it barely differs from the current one — in other words, whenever your pace is fine. `explain` prints the computed value on its `projection:` line, so you can see what it decided and why nothing rendered.
+
+It also needs a `resets_at` stamp in the stdin payload. Older Claude Code versions do not send one.
+
 ## Values look stale
 
 The usage API response is cached for `CESL_CACHE_TTL` seconds (60 by default). Lower it, or delete the cache directory reported by `explain`, to force a refresh.
@@ -54,6 +62,8 @@ Use `nerd` only if you actually have a Nerd Font installed — it draws a branch
 Claude Code truncates rather than wraps. Turn off segments you do not need or shrink the bars — see [Keep the line short on narrow terminals](tips.md#keep-the-line-short-on-narrow-terminals).
 
 ## Colours look wrong or absent
+
+If colour is missing entirely, check `NO_COLOR` and `TERM` first — both are honoured, and `explain` reports what it resolved on its `colour:` line. Force it back on with `CESL_COLOR=1`.
 
 The palette uses truecolor escape sequences. In a terminal limited to 256 colours the output degrades, sometimes badly. Confirm your terminal advertises truecolor (`echo $COLORTERM` should print `truecolor` or `24bit`), and remember that multiplexers like `tmux` need explicit truecolor passthrough configured.
 

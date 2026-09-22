@@ -17,13 +17,15 @@ Once installed there is nothing to run — Claude Code calls the script on every
 The output has two parts: one line of session info, and a small dashboard of rate-limit bars underneath.
 
 ```
-Fable 5 │ 38% (76k/200k) │ …/wks/my-project (feature/epic-v2 S:1 A:2) │ $1.87 · 1h31m · +156/-23 · ● high
+Fable 5 │ 38% (76k/200k) │ …/wks/my-project (feature/epic-v2 S:1 A:2) │ $1.87 · 1h31m · +156/-23 · 7.6k/turn · 88t · ● high
 
-5-hour  ██░░░░░░░░  38%  ⟳ 10:00pm
+5-hour  ██░░░░░░░░  38%  ⟳ 10:00pm  ⇢ 94%
 7-day   ███░░░░░░░  29%  ⟳ aug 9
 fable   ████░░░░░░  41%  ⟳ aug 6
 extra   ██░░░░░░░░  $12.40/$50.00  ⟳ sep 1
 ```
+
+A third part appears only when it has something to say: a hint line under the dashboard when the session has grown expensive.
 
 ## Line 1: the session at a glance
 
@@ -41,6 +43,8 @@ extra   ██░░░░░░░░  $12.40/$50.00  ⟳ sep 1
 | **Session cost** | `$1.87` | What this session has spent, with its own warn / critical thresholds and optional currency conversion |
 | **Duration** | `1h31m` | How long the session has been running |
 | **Lines changed** | `+156/-23` | Cumulative lines added and removed — a quick honesty check on what the session produced |
+| **Per-turn cost** | `7.6k/turn` | What the next message costs *before you type a character* — the whole context re-sent at the cache-read rate. Yellow past `CESL_CTX_WARN`, red past `CESL_CTX_HIGH` |
+| **Turns** | `88t` | API requests on this conversation so far. Requires Claude Code ≥ 2.1.251 |
 | **Effort** | `● high` | The session's effort level (`●` high, `◑` medium, `◔` low) |
 | **Badges** | `fast · [code-reviewer]` | Subagent name, fast mode, thinking, vim mode, non-default output style |
 
@@ -57,6 +61,33 @@ Each row is a progress bar with the same colour escalation as everything else, f
 
 The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working.
 
+Each row can be hidden on its own — see [trimming the rate-limit dashboard](configuration.md#trimming-the-rate-limit-dashboard). Turning off both API-backed rows also skips the API call entirely.
+
+### The pace projection
+
+The 5-hour and 7-day rows can end with `⇢ 94%`: where the window lands at this rate, extrapolated from how far into it you already are.
+
+```
+5-hour  ███░░░░░░░  38%  ⟳ 2:42pm  ⇢ 94%
+```
+
+38% burned two hours into a five-hour window is not 38% of a problem — it is a window that runs out before it resets. The projection needs no state and no extra API call: the window opened at `resets_at` minus its own length, so the elapsed fraction follows from the reset stamp alone.
+
+It stays quiet unless the pace actually overruns. Nothing renders in the first tenth of a window (too little signal to extrapolate from), when the projection lands below `CESL_WARN`, or when it barely moves off the current figure. Hide it with `CESL_SHOW_PROJECTION=0`.
+
+### The context hint
+
+Past a threshold, a line appears under the dashboard saying what to do about it:
+
+```
+⚠ 93% of the window used — /compact now, or /clear if you have switched task
+⚠ 486k context — every turn re-sends it at 48k before you type — /clear between tasks
+```
+
+The two are different problems and take different commands. A nearly full **window** needs `/compact`; there is no room left. A merely **large** session needs `/clear`; a 486k conversation on a 1M window is only half full and still pays 48k on every turn, so compacting it is beside the point — starting a fresh session for the next task is the fix.
+
+The first fires at `CESL_HIGH` (80% of the window), the second at `CESL_CTX_HIGH` (120k tokens). `CESL_SHOW_HINT=0` turns both off.
+
 ## Colour coding
 
 One escalation scale drives every percentage-based segment — context usage and every rate bar:
@@ -68,7 +99,17 @@ One escalation scale drives every percentage-based segment — context usage and
 | Orange | ≥ 80% (context also gains a bold `⚠`) | `CESL_HIGH` |
 | Red | ≥ 90% | `CESL_CRIT` |
 
-Session cost is the exception: it runs on its own `CESL_COST_WARN` / `CESL_COST_CRIT` thresholds, expressed in your display currency. The model name is not part of the scale at all — it is coloured by model family so you always know what you are talking to.
+Session cost is the exception: it runs on its own `CESL_COST_WARN` / `CESL_COST_CRIT` thresholds, expressed in your display currency. The per-turn cost is the other exception: it runs on absolute token counts (`CESL_CTX_WARN` / `CESL_CTX_HIGH`), because a percentage of a 1M window says nothing about what a message costs. The model name is not part of the scale at all — it is coloured by model family so you always know what you are talking to.
+
+### Turning colour off
+
+`NO_COLOR` and `TERM=dumb` are both honoured, and `CESL_COLOR` overrides the detection in either direction:
+
+```bash
+NO_COLOR=1                   # plain text
+CESL_COLOR=0                 # same, regardless of the environment
+CESL_COLOR=1                 # colour even when NO_COLOR is set
+```
 
 ## The `explain` subcommand
 

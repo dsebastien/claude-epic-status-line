@@ -29,6 +29,18 @@ A typo in a numeric knob cannot break rendering: non-numeric and out-of-range va
 | `CESL_HIGH` | `80` | Turn orange; context also gains a steady bold `⚠` |
 | `CESL_CRIT` | `90` | Turn red |
 
+## Context size thresholds
+
+These are absolute token counts, not percentages, and they drive the per-turn cost colour and the hint line.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CESL_CTX_WARN` | `60000` | Context size (tokens) at which the per-turn cost turns yellow |
+| `CESL_CTX_HIGH` | `120000` | Turns red, and triggers the `/clear` hint |
+| `CESL_TURN_RATE` | `0.1` | Share of the re-sent context billed each turn — the cache-read rate |
+
+A percentage answers "how much room is left"; it does not answer "what does the next message cost". On a 1M-token window those diverge badly: 486k reads as a comfortable 49% full while quietly re-sending 49k tokens on every single turn, whether you typed a paragraph or "yes". That is why these thresholds are absolute.
+
 ## Session cost
 
 | Variable | Default | Description |
@@ -82,8 +94,37 @@ Set any of these to `0` to hide that segment. All default to `1`.
 | `CESL_SHOW_DURATION` | Session duration |
 | `CESL_SHOW_LINES` | Lines added/removed |
 | `CESL_SHOW_EFFORT` | Effort level |
+| `CESL_SHOW_TURN` | Per-turn context cost and turn count |
 | `CESL_SHOW_BADGES` | Subagent, fast mode, thinking, vim, output style |
+| `CESL_SHOW_HINT` | The context hint line |
 | `CESL_SHOW_RATE_BLOCK` | The whole rate-limit dashboard |
+| `CESL_SHOW_SCOPED` | The per-model weekly rows only |
+| `CESL_SHOW_EXTRA` | The extra-usage credits row only |
+| `CESL_SHOW_PROJECTION` | The `⇢ NN%` pace projection on the 5-hour and 7-day rows |
+
+### Trimming the rate-limit dashboard
+
+`CESL_SHOW_RATE_BLOCK=0` is all-or-nothing. When you want to drop a single row and keep the rest, use the row-level toggles instead. Extra-usage credits are a common case: on a Team plan the org may have `extra_usage.is_enabled` set at the billing level even when nobody intends to spend pay-as-you-go credits, so the row costs a line and tells you nothing.
+
+```bash
+# Keep the 5-hour, 7-day and per-model rows; drop the extra-usage line
+CESL_SHOW_EXTRA=0
+```
+
+`CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA` are the only two rows that need the usage API. Setting **both** to `0` skips OAuth token resolution and the HTTP request entirely on every render, which is the cheapest the status line gets while keeping the 5-hour and 7-day bars:
+
+```bash
+CESL_SHOW_SCOPED=0
+CESL_SHOW_EXTRA=0
+```
+
+## Colour control
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CESL_COLOR` | `auto` | `auto` honours `NO_COLOR` and `TERM=dumb`; `1` always colours; `0` never does |
+
+[`NO_COLOR`](https://no-color.org) is respected when it is set to a non-empty value, as is `TERM=dumb`. Set `CESL_COLOR=1` to force colour anyway — useful when piping into something that does understand escapes. Stripping happens at a single point just before output, so no segment can leak colour past the gate.
 
 ## Palette
 

@@ -41,6 +41,17 @@ CESL_SHOW_BADGES=0
 CESL_SHOW_GIT=0
 ```
 
+### Offline mode — no API call at all
+
+The per-model and extra-usage rows are the only two that need the usage API. Drop both and the status line never resolves a token or opens a connection, while the 5-hour and 7-day bars keep working from the stdin payload.
+
+```bash
+CESL_SHOW_SCOPED=0
+CESL_SHOW_EXTRA=0
+```
+
+Drop just one if that is all you want — `CESL_SHOW_EXTRA=0` is the common case on a Team plan, where the org can have extra usage enabled at the billing level even though nobody intends to spend credits.
+
 ### Costs in euros
 
 ```bash
@@ -67,6 +78,23 @@ The bold `⚠` at `CESL_HIGH` exists so you can `/compact` on your own terms —
 ## Watch the per-model row before starting big work
 
 The per-model weekly bar is the one that ruins weeks. Glance at it before kicking off a long Opus session on a Monday: if it is already orange, either switch families or plan the work around the reset time shown at the end of the row.
+
+## Watch `k/turn`, not the percentage
+
+The percentage answers "how much room is left". `48k/turn` answers "what does the next message cost", and on a large window they disagree: 486k of a 1M window is under half full and still re-sends 48k tokens on every turn, because the API is stateless and turn N re-sends turns 1..N-1. A one-word reply costs exactly what a complex request costs.
+
+The practical consequence is that **`/clear` between unrelated tasks is the biggest lever you have**, and it is free. Four forty-turn sessions move less than half the context of one hundred-and-sixty-turn session, for identical work — and none of them goes near the ceiling. Shorter prompts are not the lever; session size is.
+
+Tune `CESL_CTX_HIGH` to the number at which you want to be told:
+
+```bash
+CESL_CTX_WARN=40000
+CESL_CTX_HIGH=80000
+```
+
+## Treat `⇢` as the number that matters on the rate rows
+
+`5-hour ███░░░░░░░ 38% ⟳ 2:42pm ⇢ 94%` is not a 38% problem. The projection extrapolates your current burn rate to the end of the window, and it only appears when that pace overruns — so when you see it, the window runs out before it resets. Either slow down, switch model families, or plan the rest of the work around the reset time next to it.
 
 ## Running several sessions in parallel
 

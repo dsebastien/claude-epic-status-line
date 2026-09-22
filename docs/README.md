@@ -20,10 +20,13 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that repla
 ## Key features
 
 - **Answers every question you have mid-session at a glance** — which model you are on, how much context is left, what branch you are on, what the session has cost, how long it has run, and how close you are to a rate limit. No `/cost`, no external dashboard, no guessing.
-- **A rate-limit dashboard built into the status bar** — the 5-hour window, the 7-day window, **per-model weekly limits**, and extra-usage credits, each with the exact time it resets. The per-model numbers come from an undocumented field in the usage API that Claude Code's own UI does not display anywhere.
+- **A rate-limit dashboard built into the status bar** — the 5-hour window, the 7-day window, **per-model weekly limits**, and extra-usage credits, each with the exact time it resets, and each switchable on its own. The per-model numbers come from an undocumented field in the usage API that Claude Code's own UI does not display anywhere.
+- **What a turn actually costs** — `48k/turn` is the whole context re-sent before you type a character, and the API is stateless so you pay it on every message, whether you wrote a paragraph or "yes". A percentage cannot tell you this: 486k of a 1M window reads as a comfortable 49% full.
+- **A pace projection, not just a reading** — `⇢ 94%` says where the 5-hour window lands at the rate you are burning it. 38% two hours in is not 38% of a problem; it is a window that runs out before it resets.
+- **A hint that names the command** — `/compact` when the window is full, `/clear` when the session is merely expensive. Different problems, different fixes.
 - **One escalation scale everywhere** — yellow at 70%, orange at 80% (context also gains a steady bold `⚠`, your cue to `/compact`), red at 90%. When something lights up, it means something.
 - **Rich git context** — branch, staged / unstaged / untracked counts, ahead-behind arrows, and a worktree marker. Invaluable when you run several Claude sessions in parallel.
-- **Configurable down to the hue, or not at all** — thresholds, palette, model-family colours, bar width, glyph sets (`unicode` / `nerd` / `ascii`), per-segment toggles, currency conversion, cache TTL. Every knob is optional.
+- **Configurable down to the hue, or not at all** — thresholds, palette, model-family colours, bar width, glyph sets (`unicode` / `nerd` / `ascii`), per-segment and per-row toggles, `NO_COLOR` support, currency conversion, cache TTL. Every knob is optional.
 - **Plain bash, Linux and macOS** — bash 3.2+, BSD or GNU userland. Only `jq`, `curl` and `git` are required, and a warm render takes about 60 ms.
 
 ## Quick start

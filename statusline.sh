@@ -12,6 +12,8 @@
 #
 # Subcommand: `statusline.sh explain` (with the same stdin) dumps the received
 # JSON and every parsed value instead of rendering — for debugging.
+#
+# Colour honours NO_COLOR and TERM=dumb unless CESL_COLOR forces it.
 set -f
 export LC_ALL=C
 
@@ -66,7 +68,23 @@ _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 : "${CESL_SHOW_LINES:=1}"
 : "${CESL_SHOW_EFFORT:=1}"
 : "${CESL_SHOW_BADGES:=1}"
+: "${CESL_SHOW_TURN:=1}"
+: "${CESL_SHOW_HINT:=1}"
 : "${CESL_SHOW_RATE_BLOCK:=1}"
+# Rate-block rows that cost an API call — each independently switchable, so
+# hiding one does not force the whole dashboard off
+: "${CESL_SHOW_SCOPED:=1}"
+: "${CESL_SHOW_EXTRA:=1}"
+# Projected end-of-window utilization on the 5-hour / 7-day rows
+: "${CESL_SHOW_PROJECTION:=1}"
+# Absolute context thresholds, in tokens. A percentage hides what a turn costs:
+# 486k of a 1M window reads as a comfortable 49% while costing 49k every turn.
+: "${CESL_CTX_WARN:=60000}"
+: "${CESL_CTX_HIGH:=120000}"
+# Share of the re-sent context that is billed each turn (cache-read rate)
+: "${CESL_TURN_RATE:=0.1}"
+# Colour: auto (honour NO_COLOR / TERM=dumb) | 1 (always) | 0 (never)
+: "${CESL_COLOR:=auto}"
 # Palette (truecolor "R;G;B")
 : "${CESL_COLOR_TEXT:=220;220;220}"
 : "${CESL_COLOR_OK:=0;175;80}"
@@ -94,23 +112,43 @@ CESL_BAR_WIDTH=$(( 10#$CESL_BAR_WIDTH ))
 case "$CESL_CACHE_TTL" in ''|*[!0-9]*) CESL_CACHE_TTL=60 ;; esac
 [ "${#CESL_CACHE_TTL}" -gt 7 ] && CESL_CACHE_TTL=60
 CESL_WARN=$(( 10#$CESL_WARN )); CESL_HIGH=$(( 10#$CESL_HIGH )); CESL_CRIT=$(( 10#$CESL_CRIT ))
+case "$CESL_CTX_WARN" in ''|*[!0-9]*) CESL_CTX_WARN=60000 ;; esac
+[ "${#CESL_CTX_WARN}" -gt 12 ] && CESL_CTX_WARN=60000
+case "$CESL_CTX_HIGH" in ''|*[!0-9]*) CESL_CTX_HIGH=120000 ;; esac
+[ "${#CESL_CTX_HIGH}" -gt 12 ] && CESL_CTX_HIGH=120000
+CESL_CTX_WARN=$(( 10#$CESL_CTX_WARN )); CESL_CTX_HIGH=$(( 10#$CESL_CTX_HIGH ))
+case "$CESL_TURN_RATE" in ''|*[!0-9.]*) CESL_TURN_RATE=0.1 ;; esac
+[ "${#CESL_TURN_RATE}" -gt 8 ] && CESL_TURN_RATE=0.1
+
+# ── Colour gate ─────────────────────────────────────────────────────
+# Everything is still built with escapes; they are stripped at output time so
+# no segment can accidentally leak colour when it is switched off.
+case "$CESL_COLOR" in
+    0|no|off|never)  cesl_color=0 ;;
+    1|yes|on|always) cesl_color=1 ;;
+    *)
+        cesl_color=1
+        [ -n "${NO_COLOR:-}" ] && cesl_color=0
+        [ "${TERM:-}" = "dumb" ] && cesl_color=0
+        ;;
+esac
 
 # ── Glyphs ──────────────────────────────────────────────────────────
 case "$CESL_GLYPHS" in
     ascii)
         g_sep="|"  g_fill="#" g_empty="." g_warn="!" g_reset="~"
         g_dot="-"  g_ellipsis="..." g_ahead="^" g_behind="v" g_wt="wt"
-        g_eff_high="*" g_eff_med="o" g_eff_low="." g_branch=""
+        g_eff_high="*" g_eff_med="o" g_eff_low="." g_branch="" g_proj="->"
         ;;
     nerd)
         g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
         g_dot="·"  g_ellipsis="…" g_ahead="⇡" g_behind="⇣" g_wt="⎇wt"
-        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=" "
+        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=" " g_proj="⇢"
         ;;
     *)
         g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
         g_dot="·"  g_ellipsis="…" g_ahead="⇡" g_behind="⇣" g_wt="⎇wt"
-        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=""
+        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch="" g_proj="⇢"
         ;;
 esac
 
@@ -256,6 +294,40 @@ fmt_reset_any() { # style value(epoch-seconds or ISO-8601)
     [ -n "$epoch" ] && fmt_epoch "$style" "$epoch"
 }
 
+# Projected utilization at the end of a rolling window, extrapolated from how
+# far into it we already are. Stateless: the window opened at (reset - length),
+# so the elapsed fraction is derivable from the reset stamp alone.
+project_pct() { # used_pct reset_value window_seconds
+    local used=$1 val=$2 win=$3 epoch="" now elapsed proj
+    [ "$CESL_SHOW_PROJECTION" = "1" ] || return
+    [ "$used" -gt 0 ] 2>/dev/null || return
+    [ "${#val}" -gt 64 ] && return
+    case "$val" in
+        ''|-|null) return ;;
+        *[!0-9]*) epoch=$(iso_to_epoch "$val") || return ;;
+        *) [ "${#val}" -le 12 ] && epoch=$(( 10#$val )) || return ;;
+    esac
+    [ -n "$epoch" ] || return
+    now=$(date +%s)
+    elapsed=$(( now - (epoch - win) ))
+    # Extrapolating from the first few minutes of a window is noise, and a
+    # negative or overrun elapsed means the stamp is not what we assumed
+    [ "$elapsed" -gt $(( win / 10 )) ] 2>/dev/null || return
+    [ "$elapsed" -lt "$win" ] 2>/dev/null || return
+    proj=$(( used * win / elapsed ))
+    [ "$proj" -gt 999 ] && proj=999
+    # Quiet when healthy: only speak up when the current pace overruns
+    [ "$proj" -ge "$CESL_WARN" ] 2>/dev/null || return
+    [ "$proj" -ge $(( used + 5 )) ] 2>/dev/null || return
+    printf '%d' "$proj"
+}
+
+proj_suffix() { # projected_pct -> " ⇢ NN%" in the escalation colour
+    local p=$1 c=$1
+    [ "$c" -gt 100 ] && c=100
+    printf '%s' " ${dim}${g_proj}${reset} \033[38;2;$(state_rgb "$c")m${p}%${reset}"
+}
+
 # ── Extract stdin fields (single jq; sentinel keeps TSV aligned) ────
 read_json=$(printf '%s' "$input" | jq -r '[
     ((.model.display_name)? // "Claude"),
@@ -280,20 +352,21 @@ read_json=$(printf '%s' "$input" | jq -r '[
     (((.rate_limits.five_hour.used_percentage)? // (.rate_limits.five_hour.utilization)? // "") | tostring),
     (((.rate_limits.five_hour.resets_at)? // "") | tostring),
     (((.rate_limits.seven_day.used_percentage)? // (.rate_limits.seven_day.utilization)? // "") | tostring),
-    (((.rate_limits.seven_day.resets_at)? // "") | tostring)
+    (((.rate_limits.seven_day.resets_at)? // "") | tostring),
+    (((.prompt_cache.requests)? // 0) | tostring)
 ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
 
 # Invalid/unparseable stdin must degrade to sentinels, never to empty fields
 # (empty fields would shift the read and fabricate 0% rate rows)
 if [ -z "$read_json" ]; then
-    read_json=$(printf 'Claude\t-\t-\t2.1.34\tdefault\t-\t-\t-\t-\t200000\t0\t0\t0\tfalse\t-\tfalse\tfalse\t-\t-\t-\t-\t-\t-')
+    read_json=$(printf 'Claude\t-\t-\t2.1.34\tdefault\t-\t-\t-\t-\t200000\t0\t0\t0\tfalse\t-\tfalse\tfalse\t-\t-\t-\t-\t-\t-\t0')
 fi
 
 IFS=$'\t' read -r model_name model_id cwd cc_version output_style \
     cost_usd duration_ms lines_added lines_removed \
     size input_tokens cache_create cache_read \
     exceeds_200k effort_level fast_mode thinking_on vim_mode agent_name \
-    sl_five_pct sl_five_reset sl_seven_pct sl_seven_reset <<< "$read_json"
+    sl_five_pct sl_five_reset sl_seven_pct sl_seven_reset turn_requests <<< "$read_json"
 
 [ -z "$cwd" ] || [ "$cwd" = "null" ] || [ "$cwd" = "-" ] && cwd=$(pwd)
 # Digits-only + length caps + base-10 forcing: leading zeros must not trip
@@ -307,6 +380,9 @@ case "$cache_create" in ''|*[!0-9]*) cache_create=0 ;; esac
 case "$cache_read" in ''|*[!0-9]*) cache_read=0 ;; esac
 [ "${#cache_read}" -gt 12 ] && cache_read=0
 case "$cc_version" in ''|*[!0-9.]*) cc_version="2.1.34" ;; esac
+case "$turn_requests" in ''|*[!0-9]*) turn_requests=0 ;; esac
+[ "${#turn_requests}" -gt 9 ] && turn_requests=0
+turn_requests=$(( 10#$turn_requests ))
 
 # Untrusted display strings (sanitized + length-capped)
 model_name=$(sanitize "$model_name" 40)
@@ -322,6 +398,18 @@ size=$(( 10#$size ))
 pct_used=$(( current * 100 / size ))
 used_fmt=$(format_tokens "$current")
 total_fmt=$(format_tokens "$size")
+
+# ── Per-turn context cost ───────────────────────────────────────────
+# The API is stateless: every turn re-sends the whole context before you type
+# a character. Billed at the cache-read rate, that is the real running cost,
+# and the window percentage does not show it on a large window.
+turn_tokens=$(awk -v c="$current" -v r="$CESL_TURN_RATE" 'BEGIN {printf "%d", c * r}' 2>/dev/null)
+case "$turn_tokens" in ''|*[!0-9]*) turn_tokens=0 ;; esac
+turn_fmt=$(format_tokens "$turn_tokens")
+ctx_tok_rgb=""
+if   [ "$current" -ge "$CESL_CTX_HIGH" ]; then ctx_tok_rgb="$CESL_COLOR_CRIT"
+elif [ "$current" -ge "$CESL_CTX_WARN" ]; then ctx_tok_rgb="$CESL_COLOR_WARN"
+fi
 
 # ── Model: short name + family hue ──────────────────────────────────
 short_model="${model_name/Claude /}"
@@ -483,6 +571,16 @@ if [ "$CESL_SHOW_LINES" = "1" ]; then
     fi
 fi
 
+# Per-turn cost, and the turn count that multiplies it (Claude Code >= 2.1.251)
+if [ "$CESL_SHOW_TURN" = "1" ] && [ "$current" -ge 1000 ]; then
+    if [ -n "$ctx_tok_rgb" ]; then
+        madd "\033[38;2;${ctx_tok_rgb}m${turn_fmt}/turn${reset}"
+    else
+        madd "${dim}${turn_fmt}/turn${reset}"
+    fi
+    [ "$turn_requests" -gt 0 ] && madd "${dim}${turn_requests}t${reset}"
+fi
+
 if [ "$CESL_SHOW_EFFORT" = "1" ] && [ "$effort_level" != "-" ] && [ -n "$effort_level" ]; then
     case "$effort_level" in
         high|xhigh|max) eff_g="$g_eff_high" ;;
@@ -547,7 +645,15 @@ cache_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-statusline-$(id -u)"
 cache_file="$cache_dir/usage-cache.json"
 usage_data=""
 
-if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
+# The API only feeds the scoped-weekly and extra-usage rows. With both hidden
+# there is nothing to enrich, so skip token resolution and the request entirely.
+usage_needed=0
+if [ "$CESL_SHOW_RATE_BLOCK" = "1" ] \
+   && { [ "$CESL_SHOW_SCOPED" = "1" ] || [ "$CESL_SHOW_EXTRA" = "1" ]; }; then
+    usage_needed=1
+fi
+
+if [ "$usage_needed" = "1" ]; then
     mkdir -m 700 -p "$cache_dir" 2>/dev/null
     if [ ! -d "$cache_dir" ] || [ -L "$cache_dir" ] || [ ! -O "$cache_dir" ]; then
         cache_file=""
@@ -669,51 +775,75 @@ rate_row() { # label pct reset_style reset_val [value_text]
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
     # 5-hour / 7-day: stdin is authoritative
     if [ "$sl_five_pct" != "-" ]; then
-        rate_row "5-hour" "$(clamp_pct "$sl_five_pct")" time "$sl_five_reset"
+        five_pct=$(clamp_pct "$sl_five_pct")
+        rate_row "5-hour" "$five_pct" time "$sl_five_reset"
+        five_proj=$(project_pct "$five_pct" "$sl_five_reset" 18000)
+        [ -n "$five_proj" ] && rate_lines+=$(proj_suffix "$five_proj")
     fi
     if [ "$sl_seven_pct" != "-" ]; then
-        rate_row "7-day" "$(clamp_pct "$sl_seven_pct")" day "$sl_seven_reset"
+        seven_pct=$(clamp_pct "$sl_seven_pct")
+        rate_row "7-day" "$seven_pct" day "$sl_seven_reset"
+        seven_proj=$(project_pct "$seven_pct" "$sl_seven_reset" 604800)
+        [ -n "$seven_proj" ] && rate_lines+=$(proj_suffix "$seven_proj")
     fi
 
     if [ -n "$usage_data" ]; then
         # Per-model scoped weekly limits (undocumented limits[]; defensive)
-        scoped=$(printf '%s' "$usage_data" | jq -r '
-            ((.limits)? // []) |
-            (if type == "array" then . else [] end) |
-            map(select(((.kind)? // "") == "weekly_scoped" and ((.is_active)? != false))) |
-            .[] | [
-                (((.scope.model.display_name)? // (.scope.model.id)? // (.group)? // "model") | tostring),
-                (((.percent)? // 0) | tostring),
-                (((.resets_at)? // "-") | tostring)
-            ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null | head -n 8)
-        if [ -n "$scoped" ]; then
-            while IFS=$'\t' read -r sc_label sc_pct sc_reset; do
-                [ -z "$sc_label" ] || [ "$sc_label" = "-" ] && continue
-                sc_label=$(sanitize "$sc_label" | tr 'A-Z' 'a-z')
-                rate_row "$sc_label" "$(clamp_pct "$sc_pct")" day "$sc_reset"
-            done <<< "$scoped"
+        if [ "$CESL_SHOW_SCOPED" = "1" ]; then
+            scoped=$(printf '%s' "$usage_data" | jq -r '
+                ((.limits)? // []) |
+                (if type == "array" then . else [] end) |
+                map(select(((.kind)? // "") == "weekly_scoped" and ((.is_active)? != false))) |
+                .[] | [
+                    (((.scope.model.display_name)? // (.scope.model.id)? // (.group)? // "model") | tostring),
+                    (((.percent)? // 0) | tostring),
+                    (((.resets_at)? // "-") | tostring)
+                ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null | head -n 8)
+            if [ -n "$scoped" ]; then
+                while IFS=$'\t' read -r sc_label sc_pct sc_reset; do
+                    [ -z "$sc_label" ] || [ "$sc_label" = "-" ] && continue
+                    sc_label=$(sanitize "$sc_label" | tr 'A-Z' 'a-z')
+                    rate_row "$sc_label" "$(clamp_pct "$sc_pct")" day "$sc_reset"
+                done <<< "$scoped"
+            fi
         fi
 
-        # Extra usage (credits) — only when enabled
-        read_extra=$(printf '%s' "$usage_data" | jq -r '[
-            (((.extra_usage.is_enabled)? // false) | tostring),
-            (((.extra_usage.utilization)? // 0) | tostring),
-            (((.extra_usage.used_credits)? // 0) | tostring),
-            (((.extra_usage.monthly_limit)? // 0) | tostring)
-        ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
-        IFS=$'\t' read -r extra_enabled extra_pct_raw extra_used_raw extra_limit_raw <<< "$read_extra"
+        # Extra usage (credits) — enabled on the account and not switched off
+        if [ "$CESL_SHOW_EXTRA" = "1" ]; then
+            read_extra=$(printf '%s' "$usage_data" | jq -r '[
+                (((.extra_usage.is_enabled)? // false) | tostring),
+                (((.extra_usage.utilization)? // 0) | tostring),
+                (((.extra_usage.used_credits)? // 0) | tostring),
+                (((.extra_usage.monthly_limit)? // 0) | tostring)
+            ] | map(if . == "" then "-" else . end) | @tsv' 2>/dev/null)
+            IFS=$'\t' read -r extra_enabled extra_pct_raw extra_used_raw extra_limit_raw <<< "$read_extra"
 
-        if [ "$extra_enabled" = "true" ]; then
-            extra_pct=$(clamp_pct "$extra_pct_raw")
-            extra_used=$(awk -v v="$extra_used_raw" 'BEGIN {printf "%.2f", v / 100}')
-            extra_limit=$(awk -v v="$extra_limit_raw" 'BEGIN {printf "%.2f", v / 100}')
-            extra_rgb=$(state_rgb "$extra_pct")
-            extra_val="\033[38;2;${extra_rgb}m${CESL_CURRENCY_SYMBOL}${extra_used}${reset}${dim}/${reset}${c_txt}${CESL_CURRENCY_SYMBOL}${extra_limit}${reset}"
-            extra_reset=$(date -d "$(date +%Y-%m-01) +1 month" +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
-            [ -z "$extra_reset" ] && extra_reset=$(date -v1d -v+1m +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
-            rate_row "extra" "$extra_pct" none "" "$extra_val"
-            [ -n "$extra_reset" ] && rate_lines+=" ${dim}${g_reset}${reset} ${c_txt}${extra_reset}${reset}"
+            if [ "$extra_enabled" = "true" ]; then
+                extra_pct=$(clamp_pct "$extra_pct_raw")
+                extra_used=$(awk -v v="$extra_used_raw" 'BEGIN {printf "%.2f", v / 100}')
+                extra_limit=$(awk -v v="$extra_limit_raw" 'BEGIN {printf "%.2f", v / 100}')
+                extra_rgb=$(state_rgb "$extra_pct")
+                extra_val="\033[38;2;${extra_rgb}m${CESL_CURRENCY_SYMBOL}${extra_used}${reset}${dim}/${reset}${c_txt}${CESL_CURRENCY_SYMBOL}${extra_limit}${reset}"
+                extra_reset=$(date -d "$(date +%Y-%m-01) +1 month" +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
+                [ -z "$extra_reset" ] && extra_reset=$(date -v1d -v+1m +"%b %e" 2>/dev/null | sed 's/  / /g' | tr 'A-Z' 'a-z')
+                rate_row "extra" "$extra_pct" none "" "$extra_val"
+                [ -n "$extra_reset" ] && rate_lines+=" ${dim}${g_reset}${reset} ${c_txt}${extra_reset}${reset}"
+            fi
         fi
+    fi
+fi
+
+# ── Context hint ────────────────────────────────────────────────────
+# Says what to do, and picks the right command: /compact reclaims room in a
+# window that is nearly full, /clear is the answer to a session that is merely
+# expensive — a 486k session on a 1M window is only half full and still costs
+# 49k a turn.
+hint_line=""
+if [ "$CESL_SHOW_HINT" = "1" ]; then
+    if [ "$pct_used" -ge "$CESL_HIGH" ]; then
+        hint_line="${alert}${g_warn}${reset} ${c_txt}${pct_used}% of the window used ${dim}—${reset} ${c_txt}/compact now, or /clear if you have switched task${reset}"
+    elif [ "$current" -ge "$CESL_CTX_HIGH" ]; then
+        hint_line="${alert}${g_warn}${reset} ${c_txt}${used_fmt} context ${dim}—${reset} ${c_txt}every turn re-sends it at ${turn_fmt} before you type ${dim}—${reset} ${c_txt}/clear between tasks${reset}"
     fi
 fi
 
@@ -737,6 +867,9 @@ if [ "$mode" = "explain" ]; then
     echo "version:      $cc_version"
     echo "cwd:          $(sanitize "$cwd" 200)"
     echo "context:      $current/$size tokens ($pct_used%), exceeds_200k=$exceeds_200k"
+    echo "per turn:     $turn_tokens tokens ($turn_fmt at rate $CESL_TURN_RATE), requests=$turn_requests"
+    echo "ctx thresh:   warn=$CESL_CTX_WARN high=$CESL_CTX_HIGH tokens"
+    echo "colour:       $([ "$cesl_color" = "1" ] && echo enabled || echo disabled) (CESL_COLOR=$CESL_COLOR, NO_COLOR=${NO_COLOR:-unset}, TERM=${TERM:-unset})"
     echo "cost:         raw=$cost_usd display=${cost_fmt:-n/a} ${CESL_CURRENCY_SYMBOL} (rate $CESL_CURRENCY_RATE)"
     echo "duration:     raw_ms=$duration_ms display=${session_duration:-n/a}"
     echo "lines:        +$lines_added/-$lines_removed"
@@ -744,14 +877,16 @@ if [ "$mode" = "explain" ]; then
     echo "output_style: $output_style | agent: $agent_name"
     echo "git:          branch=${git_branch:-n/a} S=$git_staged U=$git_unstaged A=$git_untracked remote=$git_remote_status worktree=$is_worktree"
     echo "stdin limits: 5h=$(sanitize "$sl_five_pct" 20)% reset=$(sanitize "$sl_five_reset" 40) | 7d=$(sanitize "$sl_seven_pct" 20)% reset=$(sanitize "$sl_seven_reset" 40)"
+    echo "projection:   5h=${five_proj:-n/a} | 7d=${seven_proj:-n/a} (CESL_SHOW_PROJECTION=$CESL_SHOW_PROJECTION)"
     echo
     echo "== usage api =="
     if [ -n "$usage_data" ]; then
         echo "cache: ${cache_file:-disabled} (ttl ${CESL_CACHE_TTL}s)"
         printf '%s' "$usage_data" | jq '{five_hour, seven_day, extra_usage, limits}' 2>/dev/null
     else
-        echo "no data (no token, API unreachable, or rate block disabled)"
+        echo "no data (no token, API unreachable, or both CESL_SHOW_SCOPED and CESL_SHOW_EXTRA are 0)"
     fi
+    echo "fetch needed: $usage_needed (scoped=$CESL_SHOW_SCOPED extra=$CESL_SHOW_EXTRA rate_block=$CESL_SHOW_RATE_BLOCK)"
     echo
     echo "== config =="
     set | grep '^CESL_' | sort
@@ -759,7 +894,15 @@ if [ "$mode" = "explain" ]; then
 fi
 
 # ── Output ──────────────────────────────────────────────────────────
-printf "%b" "$line1"
-[ -n "$rate_lines" ] && printf "\n\n%b" "$rate_lines"
+out="$line1"
+[ -n "$rate_lines" ] && out+="\n\n${rate_lines}"
+[ -n "$hint_line" ] && out+="\n\n${hint_line}"
+
+if [ "$cesl_color" = "1" ]; then
+    printf "%b" "$out"
+else
+    # Single strip point: no segment can leak colour past the gate
+    printf "%b" "$out" | sed $'s/\033\\[[0-9;]*m//g'
+fi
 
 exit 0

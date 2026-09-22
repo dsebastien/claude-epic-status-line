@@ -30,9 +30,12 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 | **Session cost** | `$X.XX` with configurable warn/critical thresholds and currency |
 | **Session duration** | `5m`, `1h30m`, etc. |
 | **Lines changed** | `+156/-23` cumulative lines added/removed |
+| **Per-turn cost** | `48k/turn` — what the next message costs before you type, and `88t` turns so far |
 | **Effort level** | `● high`, `◑ medium`, `◔ low` (from the session itself) |
 | **Badges** | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+` |
 | **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times |
+| **Pace projection** | `⇢ 94%` — where the 5-hour / 7-day window lands at the current burn rate |
+| **Context hint** | One line naming the right command: `/compact` for a full window, `/clear` for an expensive one |
 
 ### Color coding
 
@@ -42,7 +45,9 @@ One escalation scale drives every percentage-based segment (context, rate bars) 
 - **Orange** — ≥ 80% (`CESL_HIGH`); context also gains a steady bold `⚠`
 - **Red** — ≥ 90% (`CESL_CRIT`)
 
-Session cost uses its own `CESL_COST_WARN`/`CESL_COST_CRIT` thresholds, and the model name is colored by model family (Opus, Sonnet, Haiku, Fable).
+Session cost uses its own `CESL_COST_WARN`/`CESL_COST_CRIT` thresholds. The per-turn cost uses absolute token thresholds (`CESL_CTX_WARN`/`CESL_CTX_HIGH`) because a percentage of a 1M window says nothing about what a message costs — 486k reads as a comfortable 49% full while re-sending 48k tokens every turn. The model name is colored by model family (Opus, Sonnet, Haiku, Fable).
+
+[`NO_COLOR`](https://no-color.org) and `TERM=dumb` are honored; `CESL_COLOR=0`/`1` overrides the detection either way.
 
 ## Requirements
 
@@ -88,7 +93,17 @@ Or manually remove the `statusLine` key from `~/.claude/settings.json` and delet
 
 Everything is optional — with zero config the status line renders its default design. Settings layer as: **script defaults < `~/.config/claude-epic-status-line/config.sh` < `CESL_*` environment variables** (environment wins).
 
-`install.sh` scaffolds the config file with every knob present but commented out at its default value — open it to see what's tunable: escalation thresholds (`CESL_WARN`/`CESL_HIGH`/`CESL_CRIT`), cost thresholds, bar width, cache TTL, currency, glyph set (`unicode`/`nerd`/`ascii`), per-segment `CESL_SHOW_*` toggles, the full color palette, and per-model-family hues.
+`install.sh` scaffolds the config file with every knob present but commented out at its default value — open it to see what's tunable: escalation thresholds (`CESL_WARN`/`CESL_HIGH`/`CESL_CRIT`), context-size thresholds (`CESL_CTX_WARN`/`CESL_CTX_HIGH`), cost thresholds, bar width, cache TTL, currency, glyph set (`unicode`/`nerd`/`ascii`), per-segment `CESL_SHOW_*` toggles, color control, the full color palette, and per-model-family hues.
+
+Every rate-limit row switches on its own, so hiding one doesn't cost you the rest:
+
+```bash
+CESL_SHOW_EXTRA=0       # drop the extra-usage credits row, keep everything else
+CESL_SHOW_SCOPED=0      # drop the per-model weekly rows
+CESL_SHOW_PROJECTION=0  # drop the ⇢ pace projection
+```
+
+With both `CESL_SHOW_SCOPED=0` and `CESL_SHOW_EXTRA=0`, the usage API is never called — no token resolution, no HTTP request, while the 5-hour and 7-day bars keep working.
 
 Debugging: pipe a status JSON through `statusline.sh explain` to see the raw input, every parsed value, the API/cache state, and your effective config.
 
@@ -123,11 +138,17 @@ CESL_SHOW_BADGES=0
 CESL_SHOW_GIT=0
 ```
 
+```bash
+# Offline mode — no API call at all, 5-hour and 7-day bars still rendered
+CESL_SHOW_SCOPED=0
+CESL_SHOW_EXTRA=0
+```
+
 ## How it works
 
 The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, etc.). The stdin payload is parsed in a single `jq` call for performance (auxiliary data — cache validation, API enrichment — uses separate small jq invocations), then the status line segments are assembled.
 
-The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended). The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
+The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended; the turn count needs ≥ 2.1.251). Their pace projections are derived from the same payload — the window opened at `resets_at` minus its own length, so no state file and no extra request are needed. The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
 
 ## Platform support
 
@@ -156,6 +177,8 @@ Check out my other projects at [dsebastien.net](https://dsebastien.net).
 ## Credits
 
 Inspired by [kamranahmedse/claude-statusline](https://github.com/kamranahmedse/claude-statusline).
+
+The per-turn cost, the turn count and the actionable context hint were prompted by [Field-Logic-Ltd/ClaudeStatsBar](https://github.com/Field-Logic-Ltd/ClaudeStatsBar), whose write-up makes the case that session size — not prompt length — is what actually costs you.
 
 ## License
 
