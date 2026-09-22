@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion render Promo out/claude-epic-status-line.mp4",
+    "compress": "ffmpeg -y -i out/claude-epic-status-line.mp4 -an -c:v libx264 -preset slow -crf 24 -pix_fmt yuv420p -movflags +faststart out/compressed.mp4 && mv out/compressed.mp4 out/claude-epic-status-line.mp4",
     "still": "remotion still Promo out/poster.png --frame=260",
     "upgrade": "remotion upgrade"
   },

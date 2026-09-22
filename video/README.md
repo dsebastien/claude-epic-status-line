@@ -7,10 +7,16 @@
 
 ```bash
 npm install
-npm run dev     # Remotion Studio, live preview
-npm run build   # renders out/claude-epic-status-line.mp4
-npm run still   # renders out/poster.png
+npm run dev      # Remotion Studio, live preview
+npm run build    # renders out/claude-epic-status-line.mp4
+npm run compress # re-encodes it for the docs site, roughly a third of the size
+npm run still    # renders out/poster.png
 ```
+
+`build` output is CRF 18 and around ten megabytes. `compress` re-encodes at
+CRF 24 without the silent audio track, which is visually identical on this
+kind of flat, mostly static content. Ship the compressed file to
+`docs/assets/`.
 
 ## Structure
 
