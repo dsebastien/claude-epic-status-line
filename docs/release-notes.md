@@ -7,6 +7,12 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
+## Unreleased
+
+- **5-hour / 7-day fallback** — when Claude Code's stdin payload carries no rate-limit data (for example before the first reply of a session), the two bars are filled in from the usage API instead of disappearing. This needs an OAuth token. Note that the API can now be called even with `CESL_SHOW_SCOPED=0` and `CESL_SHOW_EXTRA=0`, but only to fill in those two bars; `CESL_SHOW_RATE_BLOCK=0` turns it off completely.
+- **One-line rate limits** — `CESL_RATE_LAYOUT=inline` puts the 5-hour, 7-day, per-model and extra-usage bars on a single line under the session line. The default, `rows`, is unchanged.
+- **`explain`** — the `limits:` line (formerly `stdin limits:`) shows where each 5-hour / 7-day value came from, and `fetch needed:` lists the backfill as a reason.
+
 ## v2.1.0 — what a turn costs
 
 A percentage tells you how much room is left. It does not tell you what the next message costs, and on a 1M-token window those two diverge badly. This release closes that gap, and makes the rate-limit dashboard something you can trim a row at a time.

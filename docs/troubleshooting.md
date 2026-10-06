@@ -16,7 +16,7 @@ Start with [`explain`](usage.md#the-explain-subcommand) — it prints the raw st
 
 ## The rate-limit dashboard is missing
 
-The 5-hour and 7-day bars come from the stdin payload, which requires Claude Code **2.1.140 or newer**. Upgrade Claude Code, then run `explain` and look at the raw JSON: if there is no rate-limit data in the payload, the version is the cause.
+The 5-hour and 7-day bars come from the stdin payload, which requires Claude Code **2.1.140 or newer**. Upgrade Claude Code, then run `explain` and look at the raw JSON: if there is no rate-limit data in the payload, the version is the cause. When the payload has none (for example before the first reply of a session), the script falls back to the usage API, which needs an OAuth token — see the next section.
 
 Also confirm `CESL_SHOW_RATE_BLOCK` is not set to `0`.
 
@@ -33,7 +33,7 @@ If none resolves, the rows are skipped deliberately — this is not an error sta
 
 Extra-usage credits only render when extra usage is actually enabled on your account.
 
-Also check `CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA`. With both set to `0` the API is never called at all, and `explain` says so on its `fetch needed:` line.
+Also check `CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA`. With both set to `0` the API is only called to backfill missing 5-hour / 7-day numbers, and `explain` shows why on its `fetch needed:` line. Its `limits:` line says whether each of those two values came from `stdin` or the `usage api`.
 
 ## The pace projection never appears
 

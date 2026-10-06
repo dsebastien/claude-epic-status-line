@@ -33,7 +33,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 | **Per-turn cost** | `48k/turn` — what the next message costs before you type, and `88t` turns so far |
 | **Effort level** | `● high`, `◑ medium`, `◔ low` (from the session itself) |
 | **Badges** | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+` |
-| **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times |
+| **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times — one row each, or all on one line with `CESL_RATE_LAYOUT=inline` |
 | **Pace projection** | `⇢ 94%` — where the 5-hour / 7-day window lands at the current burn rate |
 | **Context hint** | One line naming the right command: `/compact` for a full window, `/clear` for an expensive one |
 
@@ -103,7 +103,7 @@ CESL_SHOW_SCOPED=0      # drop the per-model weekly rows
 CESL_SHOW_PROJECTION=0  # drop the ⇢ pace projection
 ```
 
-With both `CESL_SHOW_SCOPED=0` and `CESL_SHOW_EXTRA=0`, the usage API is never called — no token resolution, no HTTP request, while the 5-hour and 7-day bars keep working.
+With both `CESL_SHOW_SCOPED=0` and `CESL_SHOW_EXTRA=0`, the usage API is only called when the stdin payload is missing the 5-hour / 7-day numbers (for example before the first reply of a session), to fill in those two bars. `CESL_SHOW_RATE_BLOCK=0` turns the API off completely.
 
 Debugging: pipe a status JSON through `statusline.sh explain` to see the raw input, every parsed value, the API/cache state, and your effective config.
 

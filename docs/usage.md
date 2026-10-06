@@ -54,14 +54,22 @@ Each row is a progress bar with the same colour escalation as everything else, f
 
 | Row | Source | Meaning |
 |-----|--------|---------|
-| `5-hour` | stdin payload | Your rolling 5-hour usage window |
-| `7-day` | stdin payload | Your rolling 7-day usage window |
+| `5-hour` | stdin payload (usage API fallback) | Your rolling 5-hour usage window |
+| `7-day` | stdin payload (usage API fallback) | Your rolling 7-day usage window |
 | *model name* | usage API | The **per-model weekly limit** for the family you are currently using. Claude Code's own UI does not show this number anywhere |
 | `extra` | usage API | Extra-usage credits consumed against your cap, in currency rather than percent. Only rendered when extra usage is enabled on your account |
 
-The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working.
+The 5-hour and 7-day bars come straight from the stdin payload, so they usually cost nothing. When the payload has no rate-limit data (for example before the first reply of a session), they are filled in from the usage API instead, which needs an OAuth token. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working.
 
-Each row can be hidden on its own — see [trimming the rate-limit dashboard](configuration.md#trimming-the-rate-limit-dashboard). Turning off both API-backed rows also skips the API call entirely.
+Each row can be hidden on its own — see [trimming the rate-limit dashboard](configuration.md#trimming-the-rate-limit-dashboard). Turning off both API-backed rows skips the API call whenever the payload carries the 5-hour and 7-day numbers.
+
+To save vertical space, `CESL_RATE_LAYOUT=inline` puts every row on one line, directly under the session line:
+
+```
+5h ░░░░░   3% ⟳ 4:30pm │ 7d ░░░░░   2% ⟳ oct 9 │ extra ░░░░░ $0.00/$0.00 ⟳ nov 1
+```
+
+That example uses `CESL_BAR_WIDTH=5`; a narrower bar keeps the line from wrapping in a small terminal.
 
 ### The pace projection
 

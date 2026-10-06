@@ -4,8 +4,9 @@
 # Data sources:
 #   - Claude Code statusline stdin JSON (authoritative: model, context, cost,
 #     git cwd, effort, badges, 5-hour/7-day rate limits)  [Claude Code >= 2.1.140]
-#   - OAuth usage API (optional enrichment only: extra-usage credits and
-#     per-model scoped weekly limits; skipped when no token is resolvable)
+#   - OAuth usage API (optional: extra-usage credits, per-model scoped weekly
+#     limits, and the 5-hour/7-day values when stdin carries none; skipped
+#     when no token is resolvable)
 #
 # Configuration (all optional):
 #   defaults below  <  ~/.config/claude-epic-status-line/config.sh  <  CESL_* env vars
@@ -51,6 +52,8 @@ _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 : "${CESL_COST_CRIT:=20}"
 # Bars
 : "${CESL_BAR_WIDTH:=10}"
+# Rate-limit layout: rows (one row per limit) | inline (all on one line)
+: "${CESL_RATE_LAYOUT:=rows}"
 # Usage API cache TTL (seconds)
 : "${CESL_CACHE_TTL:=60}"
 # Currency
@@ -467,8 +470,10 @@ if [ "$CESL_SHOW_GIT" = "1" ] && git -C "$cwd" rev-parse --is-inside-work-tree >
     [ "$ahead" -gt 0 ] 2>/dev/null && git_remote_status+="${g_ahead}${ahead}"
     [ "$behind" -gt 0 ] 2>/dev/null && git_remote_status+="${g_behind}${behind}"
 
-    local_git_dir=$(git -C "$cwd" rev-parse --git-dir 2>/dev/null)
-    common_dir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null)
+    # Both paths can come back relative to $cwd (e.g. "../.git" in a
+    # subdirectory) while the other is absolute, so resolve before comparing
+    local_git_dir=$(cd "$cwd" 2>/dev/null && cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P)
+    common_dir=$(cd "$cwd" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)
     if [ -n "$local_git_dir" ] && [ -n "$common_dir" ] && [ "$local_git_dir" != "$common_dir" ]; then
         is_worktree=true
     fi
@@ -640,16 +645,24 @@ get_oauth_token() {
     echo ""
 }
 
-# ── Usage API fetch (cached; extra usage + scoped limits only) ──────
+# ── Usage API fetch (cached; enrichment + 5h/7d backfill) ───────────
 cache_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-statusline-$(id -u)"
 cache_file="$cache_dir/usage-cache.json"
 usage_data=""
 
-# The API only feeds the scoped-weekly and extra-usage rows. With both hidden
-# there is nothing to enrich, so skip token resolution and the request entirely.
+# Where the 5-hour / 7-day values came from, for `explain`
+five_src=stdin; [ "$sl_five_pct" = "-" ] && five_src=none
+seven_src=stdin; [ "$sl_seven_pct" = "-" ] && seven_src=none
+rate_backfill=0
+[ "$five_src" = "none" ] || [ "$seven_src" = "none" ] && rate_backfill=1
+
+# The API feeds the scoped-weekly and extra-usage rows, and backfills the
+# 5-hour / 7-day rows when stdin carries none (e.g. before the first reply of a
+# session). With nothing to enrich, skip token resolution and the request.
 usage_needed=0
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ] \
-   && { [ "$CESL_SHOW_SCOPED" = "1" ] || [ "$CESL_SHOW_EXTRA" = "1" ]; }; then
+   && { [ "$CESL_SHOW_SCOPED" = "1" ] || [ "$CESL_SHOW_EXTRA" = "1" ] \
+        || [ "$rate_backfill" = "1" ]; }; then
     usage_needed=1
 fi
 
@@ -758,8 +771,13 @@ rate_row() { # label pct reset_style reset_val [value_text]
     local rgb bar pfmt line rst
     rgb=$(state_rgb "$pct")
     bar=$(build_bar "$pct" "$CESL_BAR_WIDTH" "$rgb")
-    line=$(printf '%-7.7s' "$label")
-    line="${c_txt}${line}${reset} ${bar}"
+    if [ "$CESL_RATE_LAYOUT" = "inline" ]; then
+        case "$label" in 5-hour) label="5h" ;; 7-day) label="7d" ;; esac
+        line="${c_txt}${label}${reset} ${bar}"
+    else
+        line=$(printf '%-7.7s' "$label")
+        line="${c_txt}${line}${reset} ${bar}"
+    fi
     if [ -n "$vtext" ]; then
         line+=" ${vtext}"
     else
@@ -768,12 +786,30 @@ rate_row() { # label pct reset_style reset_val [value_text]
     fi
     rst=$(fmt_reset_any "$style" "$rval")
     [ -n "$rst" ] && line+=" ${dim}${g_reset}${reset} ${c_txt}${rst}${reset}"
-    [ -n "$rate_lines" ] && rate_lines+="\n"
+    if [ -n "$rate_lines" ]; then
+        [ "$CESL_RATE_LAYOUT" = "inline" ] && rate_lines+="$sep" || rate_lines+="\n"
+    fi
     rate_lines+="$line"
 }
 
+# 5-hour / 7-day: stdin is authoritative, the usage API is the fallback
+if [ -n "$usage_data" ] && { [ "$sl_five_pct" = "-" ] || [ "$sl_seven_pct" = "-" ]; }; then
+    read_api=$(printf '%s' "$usage_data" | jq -r '[
+        (((.five_hour.utilization)? // "") | tostring),
+        (((.five_hour.resets_at)? // "") | tostring),
+        (((.seven_day.utilization)? // "") | tostring),
+        (((.seven_day.resets_at)? // "") | tostring)
+    ] | map(if . == "" or . == "null" then "-" else . end) | @tsv' 2>/dev/null)
+    IFS=$'\t' read -r api_five_pct api_five_reset api_seven_pct api_seven_reset <<< "$read_api"
+    if [ "$sl_five_pct" = "-" ] && [ -n "$api_five_pct" ] && [ "$api_five_pct" != "-" ]; then
+        sl_five_pct=$api_five_pct; sl_five_reset=$api_five_reset; five_src="usage api"
+    fi
+    if [ "$sl_seven_pct" = "-" ] && [ -n "$api_seven_pct" ] && [ "$api_seven_pct" != "-" ]; then
+        sl_seven_pct=$api_seven_pct; sl_seven_reset=$api_seven_reset; seven_src="usage api"
+    fi
+fi
+
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
-    # 5-hour / 7-day: stdin is authoritative
     if [ "$sl_five_pct" != "-" ]; then
         five_pct=$(clamp_pct "$sl_five_pct")
         rate_row "5-hour" "$five_pct" time "$sl_five_reset"
@@ -876,7 +912,7 @@ if [ "$mode" = "explain" ]; then
     echo "effort:       $effort_level | fast: $fast_mode | thinking: $thinking_on | vim: $vim_mode"
     echo "output_style: $output_style | agent: $agent_name"
     echo "git:          branch=${git_branch:-n/a} S=$git_staged U=$git_unstaged A=$git_untracked remote=$git_remote_status worktree=$is_worktree"
-    echo "stdin limits: 5h=$(sanitize "$sl_five_pct" 20)% reset=$(sanitize "$sl_five_reset" 40) | 7d=$(sanitize "$sl_seven_pct" 20)% reset=$(sanitize "$sl_seven_reset" 40)"
+    echo "limits:       5h=$(sanitize "$sl_five_pct" 20)% reset=$(sanitize "$sl_five_reset" 40) [$five_src] | 7d=$(sanitize "$sl_seven_pct" 20)% reset=$(sanitize "$sl_seven_reset" 40) [$seven_src]"
     echo "projection:   5h=${five_proj:-n/a} | 7d=${seven_proj:-n/a} (CESL_SHOW_PROJECTION=$CESL_SHOW_PROJECTION)"
     echo
     echo "== usage api =="
@@ -884,9 +920,9 @@ if [ "$mode" = "explain" ]; then
         echo "cache: ${cache_file:-disabled} (ttl ${CESL_CACHE_TTL}s)"
         printf '%s' "$usage_data" | jq '{five_hour, seven_day, extra_usage, limits}' 2>/dev/null
     else
-        echo "no data (no token, API unreachable, or both CESL_SHOW_SCOPED and CESL_SHOW_EXTRA are 0)"
+        echo "no data (no token, API unreachable, or no fetch needed — see below)"
     fi
-    echo "fetch needed: $usage_needed (scoped=$CESL_SHOW_SCOPED extra=$CESL_SHOW_EXTRA rate_block=$CESL_SHOW_RATE_BLOCK)"
+    echo "fetch needed: $usage_needed (scoped=$CESL_SHOW_SCOPED extra=$CESL_SHOW_EXTRA 5h/7d backfill=$rate_backfill rate_block=$CESL_SHOW_RATE_BLOCK)"
     echo
     echo "== config =="
     set | grep '^CESL_' | sort
@@ -895,7 +931,9 @@ fi
 
 # ── Output ──────────────────────────────────────────────────────────
 out="$line1"
-[ -n "$rate_lines" ] && out+="\n\n${rate_lines}"
+if [ -n "$rate_lines" ]; then
+    [ "$CESL_RATE_LAYOUT" = "inline" ] && out+="\n${rate_lines}" || out+="\n\n${rate_lines}"
+fi
 [ -n "$hint_line" ] && out+="\n\n${hint_line}"
 
 if [ "$cesl_color" = "1" ]; then
