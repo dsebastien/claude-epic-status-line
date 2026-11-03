@@ -84,7 +84,7 @@ Past a threshold, a line appears under the dashboard saying what to do about it:
 ⚠ 486k context — every turn re-sends it at 48k before you type — /clear between tasks
 ```
 
-The two are different problems and take different commands. A nearly full **window** needs `/compact`; there is no room left. A merely **large** session needs `/clear`; a 486k conversation on a 1M window is only half full and still pays 48k on every turn, so compacting it is beside the point — starting a fresh session for the next task is the fix.
+The two are different problems and take different commands. A nearly full **window** needs `/compact`; there is no room left. A merely **large** session needs `/clear`; a 486k conversation on a 1M window is only half full and still pays 48k on every turn (at a 10% cache-read rate; 24k on Opus 5.5, see `CESL_TURN_RATE`), so compacting it is beside the point — starting a fresh session for the next task is the fix.
 
 The first fires at `CESL_HIGH` (80% of the window), the second at `CESL_CTX_HIGH` (120k tokens). `CESL_SHOW_HINT=0` turns both off.
 

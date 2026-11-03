@@ -78,11 +78,13 @@ _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 # Projected end-of-window utilization on the 5-hour / 7-day rows
 : "${CESL_SHOW_PROJECTION:=1}"
 # Absolute context thresholds, in tokens. A percentage hides what a turn costs:
-# 486k of a 1M window reads as a comfortable 49% while costing 49k every turn.
+# 486k of a 1M window reads as a comfortable 49% while costing 48k every turn (at a 10% cache-read rate).
 : "${CESL_CTX_WARN:=60000}"
 : "${CESL_CTX_HIGH:=120000}"
-# Share of the re-sent context that is billed each turn (cache-read rate)
-: "${CESL_TURN_RATE:=0.1}"
+# Share of the re-sent context that is billed each turn (cache-read rate).
+# "auto" picks the rate of the current model: Opus 5.5 and Sonnet 5.5 read
+# cache at 5% of the input price, Fable 5.1 at 2.5%, every other model at 10%
+: "${CESL_TURN_RATE:=auto}"
 # Colour: auto (honour NO_COLOR / TERM=dumb) | 1 (always) | 0 (never)
 : "${CESL_COLOR:=auto}"
 # Palette (truecolor "R;G;B")
@@ -117,8 +119,14 @@ case "$CESL_CTX_WARN" in ''|*[!0-9]*) CESL_CTX_WARN=60000 ;; esac
 case "$CESL_CTX_HIGH" in ''|*[!0-9]*) CESL_CTX_HIGH=120000 ;; esac
 [ "${#CESL_CTX_HIGH}" -gt 12 ] && CESL_CTX_HIGH=120000
 CESL_CTX_WARN=$(( 10#$CESL_CTX_WARN )); CESL_CTX_HIGH=$(( 10#$CESL_CTX_HIGH ))
-case "$CESL_TURN_RATE" in ''|*[!0-9.]*) CESL_TURN_RATE=0.1 ;; esac
-[ "${#CESL_TURN_RATE}" -gt 8 ] && CESL_TURN_RATE=0.1
+_cesl_turn_raw="$CESL_TURN_RATE"
+case "$CESL_TURN_RATE" in auto) ;; ''|*[!0-9.]*) CESL_TURN_RATE=auto ;; esac
+[ "${#CESL_TURN_RATE}" -gt 8 ] && CESL_TURN_RATE=auto
+# A rate is a share: one number in [0, 1]; anything else falls back to auto
+if [ "$CESL_TURN_RATE" != "auto" ] && ! awk -v r="$CESL_TURN_RATE" \
+    'BEGIN { exit !(r ~ /^([0-9]+\.?[0-9]*|\.[0-9]+)$/ && r + 0 >= 0 && r + 0 <= 1) }' 2>/dev/null; then
+    CESL_TURN_RATE=auto
+fi
 
 # ── Colour gate ─────────────────────────────────────────────────────
 # Everything is still built with escapes; they are stripped at output time so
@@ -399,18 +407,6 @@ pct_used=$(( current * 100 / size ))
 used_fmt=$(format_tokens "$current")
 total_fmt=$(format_tokens "$size")
 
-# ── Per-turn context cost ───────────────────────────────────────────
-# The API is stateless: every turn re-sends the whole context before you type
-# a character. Billed at the cache-read rate, that is the real running cost,
-# and the window percentage does not show it on a large window.
-turn_tokens=$(awk -v c="$current" -v r="$CESL_TURN_RATE" 'BEGIN {printf "%d", c * r}' 2>/dev/null)
-case "$turn_tokens" in ''|*[!0-9]*) turn_tokens=0 ;; esac
-turn_fmt=$(format_tokens "$turn_tokens")
-ctx_tok_rgb=""
-if   [ "$current" -ge "$CESL_CTX_HIGH" ]; then ctx_tok_rgb="$CESL_COLOR_CRIT"
-elif [ "$current" -ge "$CESL_CTX_WARN" ]; then ctx_tok_rgb="$CESL_COLOR_WARN"
-fi
-
 # ── Model: short name + family hue ──────────────────────────────────
 short_model="${model_name/Claude /}"
 model_lc=$(printf '%s %s' "$model_name" "$model_id" | tr 'A-Z' 'a-z')
@@ -421,6 +417,36 @@ case "$model_lc" in
     *fable*|*mythos*) model_rgb="$CESL_COLOR_FABLE" ;;
     *)               model_rgb="$CESL_COLOR_MODEL" ;;
 esac
+
+# ── Per-turn context cost ───────────────────────────────────────────
+# The API is stateless: every turn re-sends the whole context before you type
+# a character. Billed at the cache-read rate, that is the real running cost,
+# and the window percentage does not show it on a large window. The rate is
+# per model (claude.com/pricing, November 2026); an explicit number wins.
+turn_rate="$CESL_TURN_RATE"
+turn_rate_src="CESL_TURN_RATE"
+if [ "$turn_rate" = "auto" ]; then
+    turn_rate_src="auto"
+    if [ -n "$_cesl_turn_raw" ] && [ "$_cesl_turn_raw" != "auto" ]; then
+        turn_rate_src="auto (invalid CESL_TURN_RATE='$(sanitize "$_cesl_turn_raw" 20)')"
+    fi
+    case "$model_lc" in
+        # Right boundary: "opus-5-50" or "fable 5.10" must not match
+        *fable-5-1|*fable-5-1[!0-9]*|*"fable 5.1"|*"fable 5.1"[!0-9]*)
+            turn_rate=0.025 ;;
+        *opus-5-5|*opus-5-5[!0-9]*|*"opus 5.5"|*"opus 5.5"[!0-9]*|\
+        *sonnet-5-5|*sonnet-5-5[!0-9]*|*"sonnet 5.5"|*"sonnet 5.5"[!0-9]*)
+            turn_rate=0.05 ;;
+        *)  turn_rate=0.1 ;;
+    esac
+fi
+turn_tokens=$(awk -v c="$current" -v r="$turn_rate" 'BEGIN {printf "%d", c * r}' 2>/dev/null)
+case "$turn_tokens" in ''|*[!0-9]*) turn_tokens=0 ;; esac
+turn_fmt=$(format_tokens "$turn_tokens")
+ctx_tok_rgb=""
+if   [ "$current" -ge "$CESL_CTX_HIGH" ]; then ctx_tok_rgb="$CESL_COLOR_CRIT"
+elif [ "$current" -ge "$CESL_CTX_WARN" ]; then ctx_tok_rgb="$CESL_COLOR_WARN"
+fi
 
 # ── Directory: last 2 components ────────────────────────────────────
 dir_display() {
@@ -641,6 +667,13 @@ get_oauth_token() {
 }
 
 # ── Usage API fetch (cached; extra usage + scoped limits only) ──────
+# A usage payload is valid when it is an object with at least one non-null
+# known section (an error body has none, so it is never cached).
+# Do not require five_hour: verified Ultra accounts have no 5-hour limit
+# (since 2026-10-30), and a null five_hour must not throw away the
+# per-model and extra-usage data that comes with it.
+usage_jq_valid='type == "object" and ([.five_hour, .seven_day, .limits, .extra_usage] | any(. != null))'
+
 cache_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-statusline-$(id -u)"
 cache_file="$cache_dir/usage-cache.json"
 usage_data=""
@@ -669,7 +702,7 @@ if [ "$usage_needed" = "1" ]; then
         cache_size=$(wc -c < "$cache_file" 2>/dev/null | tr -d '[:space:]')
         case "$cache_size" in ''|*[!0-9]*) cache_size=9999999 ;; esac
         if [ "$cache_age" -ge 0 ] 2>/dev/null && [ "$cache_age" -lt "$CESL_CACHE_TTL" ] && [ "$cache_size" -le 1048576 ] \
-           && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
+           && jq -e "$usage_jq_valid" "$cache_file" >/dev/null 2>&1; then
             needs_refresh=false
             usage_data=$(cat "$cache_file" 2>/dev/null)
         fi
@@ -719,7 +752,7 @@ if [ "$usage_needed" = "1" ]; then
                     -H "User-Agent: claude-code/${cc_version}" \
                     --config - \
                     "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-                if [ -n "$response" ] && printf '%s' "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
+                if [ -n "$response" ] && printf '%s' "$response" | jq -e "$usage_jq_valid" >/dev/null 2>&1; then
                     usage_data="$response"
                     if [ -n "$cache_file" ]; then
                         printf '%s\n' "$response" > "$cache_file.$$" && mv -f "$cache_file.$$" "$cache_file"
@@ -743,7 +776,7 @@ if [ "$usage_needed" = "1" ]; then
             stale_age=$(( now - ${stale_mtime:-0} ))
             if [ "$stale_size" -le 1048576 ] \
                && [ "$stale_age" -ge 0 ] 2>/dev/null && [ "$stale_age" -lt 86400 ] 2>/dev/null \
-               && jq -e '.five_hour' "$cache_file" >/dev/null 2>&1; then
+               && jq -e "$usage_jq_valid" "$cache_file" >/dev/null 2>&1; then
                 usage_data=$(cat "$cache_file" 2>/dev/null)
             fi
         fi
@@ -774,7 +807,9 @@ rate_row() { # label pct reset_style reset_val [value_text]
 
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
     # 5-hour / 7-day: stdin is authoritative
-    if [ "$sl_five_pct" != "-" ]; then
+    # A 0% window with no reset stamp is a stub, not a window (no 5-hour
+    # limit on verified Ultra accounts): do not draw an empty row for it
+    if [ "$sl_five_pct" != "-" ] && { [ "$sl_five_reset" != "-" ] || [ "$(clamp_pct "$sl_five_pct")" != "0" ]; }; then
         five_pct=$(clamp_pct "$sl_five_pct")
         rate_row "5-hour" "$five_pct" time "$sl_five_reset"
         five_proj=$(project_pct "$five_pct" "$sl_five_reset" 18000)
@@ -837,13 +872,13 @@ fi
 # Says what to do, and picks the right command: /compact reclaims room in a
 # window that is nearly full, /clear is the answer to a session that is merely
 # expensive — a 486k session on a 1M window is only half full and still costs
-# 49k a turn.
+# 48k a turn at a 10% cache-read rate.
 hint_line=""
 if [ "$CESL_SHOW_HINT" = "1" ]; then
     if [ "$pct_used" -ge "$CESL_HIGH" ]; then
         hint_line="${alert}${g_warn}${reset} ${c_txt}${pct_used}% of the window used ${dim}—${reset} ${c_txt}/compact now, or /clear if you have switched task${reset}"
     elif [ "$current" -ge "$CESL_CTX_HIGH" ]; then
-        hint_line="${alert}${g_warn}${reset} ${c_txt}${used_fmt} context ${dim}—${reset} ${c_txt}every turn re-sends it at ${turn_fmt} before you type ${dim}—${reset} ${c_txt}/clear between tasks${reset}"
+        hint_line="${alert}${g_warn}${reset} ${c_txt}${used_fmt} context ${dim}—${reset} ${c_txt}every turn re-sends it, ~${turn_fmt} at the cache rate, before you type ${dim}—${reset} ${c_txt}/clear between tasks${reset}"
     fi
 fi
 
@@ -867,7 +902,7 @@ if [ "$mode" = "explain" ]; then
     echo "version:      $cc_version"
     echo "cwd:          $(sanitize "$cwd" 200)"
     echo "context:      $current/$size tokens ($pct_used%), exceeds_200k=$exceeds_200k"
-    echo "per turn:     $turn_tokens tokens ($turn_fmt at rate $CESL_TURN_RATE), requests=$turn_requests"
+    echo "per turn:     $turn_tokens tokens ($turn_fmt at rate $turn_rate, source: $turn_rate_src), requests=$turn_requests"
     echo "ctx thresh:   warn=$CESL_CTX_WARN high=$CESL_CTX_HIGH tokens"
     echo "colour:       $([ "$cesl_color" = "1" ] && echo enabled || echo disabled) (CESL_COLOR=$CESL_COLOR, NO_COLOR=${NO_COLOR:-unset}, TERM=${TERM:-unset})"
     echo "cost:         raw=$cost_usd display=${cost_fmt:-n/a} ${CESL_CURRENCY_SYMBOL} (rate $CESL_CURRENCY_RATE)"
@@ -877,6 +912,7 @@ if [ "$mode" = "explain" ]; then
     echo "output_style: $output_style | agent: $agent_name"
     echo "git:          branch=${git_branch:-n/a} S=$git_staged U=$git_unstaged A=$git_untracked remote=$git_remote_status worktree=$is_worktree"
     echo "stdin limits: 5h=$(sanitize "$sl_five_pct" 20)% reset=$(sanitize "$sl_five_reset" 40) | 7d=$(sanitize "$sl_seven_pct" 20)% reset=$(sanitize "$sl_seven_reset" 40)"
+    [ "$sl_five_pct" = "-" ] && [ "$sl_seven_pct" != "-" ] && echo "              no 5-hour data with a 7-day window: expected on a verified Ultra account (no 5-hour limit)"
     echo "projection:   5h=${five_proj:-n/a} | 7d=${seven_proj:-n/a} (CESL_SHOW_PROJECTION=$CESL_SHOW_PROJECTION)"
     echo
     echo "== usage api =="

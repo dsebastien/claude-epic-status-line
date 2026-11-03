@@ -37,9 +37,9 @@ These are absolute token counts, not percentages, and they drive the per-turn co
 |----------|---------|-------------|
 | `CESL_CTX_WARN` | `60000` | Context size (tokens) at which the per-turn cost turns yellow |
 | `CESL_CTX_HIGH` | `120000` | Turns red, and triggers the `/clear` hint |
-| `CESL_TURN_RATE` | `0.1` | Share of the re-sent context billed each turn — the cache-read rate |
+| `CESL_TURN_RATE` | `auto` | Share of the re-sent context billed each turn — the cache-read rate. `auto` follows the model: `0.05` for Opus 5.5 and Sonnet 5.5, `0.025` for Fable 5.1, `0.1` for every other model. Set a number to force it |
 
-A percentage answers "how much room is left"; it does not answer "what does the next message cost". On a 1M-token window those diverge badly: 486k reads as a comfortable 49% full while quietly re-sending 49k tokens on every single turn, whether you typed a paragraph or "yes". That is why these thresholds are absolute.
+A percentage answers "how much room is left"; it does not answer "what does the next message cost". On a 1M-token window those diverge badly: 486k reads as a comfortable 49% full while quietly re-sending 48k tokens on every single turn (at a 10% cache-read rate; 24k on Opus 5.5), whether you typed a paragraph or "yes". That is why these thresholds are absolute.
 
 ## Session cost
 

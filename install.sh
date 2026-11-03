@@ -82,12 +82,13 @@ else
 
 ## Absolute context thresholds in tokens, for the per-turn cost and the hint
 ## line. A percentage hides what a turn costs on a large window: 486k of a 1M
-## window reads as 49% full while re-sending 49k tokens every single turn.
+## window reads as 49% full while re-sending 48k tokens every turn (10% rate).
 #CESL_CTX_WARN=60000
 #CESL_CTX_HIGH=120000
 
-## Share of the re-sent context billed each turn (the cache-read rate)
-#CESL_TURN_RATE=0.1
+## Share of the re-sent context billed each turn (the cache-read rate).
+## auto = per model: 0.05 for Opus 5.5 / Sonnet 5.5, 0.025 for Fable 5.1, 0.1 otherwise
+#CESL_TURN_RATE=auto
 
 ## Segment toggles (1 = shown, 0 = hidden)
 #CESL_SHOW_MODEL=1

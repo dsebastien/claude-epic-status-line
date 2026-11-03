@@ -30,7 +30,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 | **Session cost** | `$X.XX` with configurable warn/critical thresholds and currency |
 | **Session duration** | `5m`, `1h30m`, etc. |
 | **Lines changed** | `+156/-23` cumulative lines added/removed |
-| **Per-turn cost** | `48k/turn` — what the next message costs before you type, and `88t` turns so far |
+| **Per-turn cost** | `48k/turn` — what the next message costs before you type (at the current model's cache-read rate), and `88t` turns so far |
 | **Effort level** | `● high`, `◑ medium`, `◔ low` (from the session itself) |
 | **Badges** | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+` |
 | **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times |
@@ -45,7 +45,7 @@ One escalation scale drives every percentage-based segment (context, rate bars) 
 - **Orange** — ≥ 80% (`CESL_HIGH`); context also gains a steady bold `⚠`
 - **Red** — ≥ 90% (`CESL_CRIT`)
 
-Session cost uses its own `CESL_COST_WARN`/`CESL_COST_CRIT` thresholds. The per-turn cost uses absolute token thresholds (`CESL_CTX_WARN`/`CESL_CTX_HIGH`) because a percentage of a 1M window says nothing about what a message costs — 486k reads as a comfortable 49% full while re-sending 48k tokens every turn. The model name is colored by model family (Opus, Sonnet, Haiku, Fable).
+Session cost uses its own `CESL_COST_WARN`/`CESL_COST_CRIT` thresholds. The per-turn cost uses absolute token thresholds (`CESL_CTX_WARN`/`CESL_CTX_HIGH`) because a percentage of a 1M window says nothing about what a message costs — 486k reads as a comfortable 49% full while re-sending 48k tokens every turn at a 10% cache-read rate (24k on Opus 5.5). The model name is colored by model family (Opus, Sonnet, Haiku, Fable).
 
 [`NO_COLOR`](https://no-color.org) and `TERM=dumb` are honored; `CESL_COLOR=0`/`1` overrides the detection either way.
 
@@ -148,7 +148,7 @@ CESL_SHOW_EXTRA=0
 
 The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, etc.). The stdin payload is parsed in a single `jq` call for performance (auxiliary data — cache validation, API enrichment — uses separate small jq invocations), then the status line segments are assembled.
 
-The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended; the turn count needs ≥ 2.1.251). Their pace projections are derived from the same payload — the window opened at `resets_at` minus its own length, so no state file and no extra request are needed. The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
+The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended; the turn count needs ≥ 2.1.251). Their pace projections are derived from the same payload — the window opened at `resets_at` minus its own length, so no state file and no extra request are needed. On a verified Ultra account there is no 5-hour limit, so the 5-hour row does not show. The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
 
 ## Platform support
 

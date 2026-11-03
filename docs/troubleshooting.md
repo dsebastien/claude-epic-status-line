@@ -20,6 +20,10 @@ The 5-hour and 7-day bars come from the stdin payload, which requires Claude Cod
 
 Also confirm `CESL_SHOW_RATE_BLOCK` is not set to `0`.
 
+## There is no 5-hour row
+
+On a verified Ultra account (formerly Max 20x), Anthropic removed the 5-hour limit on 2026-10-30, so there is no 5-hour window to draw. The 7-day row and the per-model rows still render. `explain` prints a line when the payload has a 7-day window but no 5-hour one.
+
 ## The per-model and extra-usage rows never appear
 
 Those two rows are API enrichment and need an OAuth token. `explain` reports whether one was resolved. The lookup order is:

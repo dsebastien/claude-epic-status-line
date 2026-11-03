@@ -7,7 +7,26 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
+## v2.2.0 — Ultra plans and per-model cache rates
+
+Two changes driven by Anthropic's own updates: the Max 20x plan became Ultra on 2026-10-30, with no 5-hour limit for verified accounts, and Opus 5.5, Sonnet 5.5 and Fable 5.1 read cache cheaper than other models.
+
+### What's new
+
+- **Per-model cache-read rate** — `CESL_TURN_RATE` now defaults to `auto`. The per-turn cost uses the rate of the model you are on: 5% of the input price for Opus 5.5 and Sonnet 5.5, 2.5% for Fable 5.1, 10% for every other model (claude.com/pricing). On Opus 5.5, a 486k session now reads `24k/turn` instead of an overstated `48k/turn`. A number in `CESL_TURN_RATE` still wins. `explain` shows the rate and where it came from.
+
+### Fixes
+
+- **Ultra accounts keep their per-model and extra-usage rows** — a usage-API payload was only accepted when it had a `five_hour` section. Without a 5-hour limit, that section can be empty, and the whole payload (per-model weekly limits included) was thrown away. A payload is now accepted when it has at least one non-empty known section; error bodies still never reach the cache. With no 5-hour data in stdin, the 5-hour row is not drawn, and `explain` says why.
+- **Stricter `CESL_TURN_RATE`** — a value that is not one number between 0 and 1 (`.`, `1.2.3`, `5`) falls back to `auto` instead of rendering 0 or millions of tokens per turn. `explain` names the invalid value.
+- **Clearer hint line** — "every turn re-sends it, ~24k at the cache rate": the whole context is re-sent, and the number is what that costs.
+
+### Compatibility
+
+The default per-turn rate changes from `0.1` to `auto`, so `/turn` numbers halve on Opus 5.5 and Sonnet 5.5 (and drop to a quarter on Fable 5.1). Set `CESL_TURN_RATE=0.1` to keep the old numbers. No other breaking changes.
+
 ## v2.1.0 — what a turn costs
+
 
 A percentage tells you how much room is left. It does not tell you what the next message costs, and on a 1M-token window those two diverge badly. This release closes that gap, and makes the rate-limit dashboard something you can trim a row at a time.
 
