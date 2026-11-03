@@ -7,11 +7,11 @@ nav_order: 2
 
 ## Requirements
 
-| Tool | Why |
-|------|-----|
-| `jq` | Parses the JSON payload Claude Code sends on stdin |
+| Tool   | Why                                                        |
+| ------ | ---------------------------------------------------------- |
+| `jq`   | Parses the JSON payload Claude Code sends on stdin         |
 | `curl` | Fetches rate-limit enrichment from the Anthropic usage API |
-| `git` | Branch, status and worktree detection |
+| `git`  | Branch, status and worktree detection                      |
 
 Plus bash 3.2 or newer. Linux and macOS are both supported, with either BSD or GNU userland — date formatting and credential resolution adapt to the platform automatically.
 

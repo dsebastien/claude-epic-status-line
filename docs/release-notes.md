@@ -27,7 +27,6 @@ The default per-turn rate changes from `0.1` to `auto`, so `/turn` numbers halve
 
 ## v2.1.0 — what a turn costs
 
-
 A percentage tells you how much room is left. It does not tell you what the next message costs, and on a 1M-token window those two diverge badly. This release closes that gap, and makes the rate-limit dashboard something you can trim a row at a time.
 
 ### What's new

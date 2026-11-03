@@ -10,7 +10,7 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 
 [![Watch the Claude Epic Status Line video](docs/assets/claude-epic-status-line-poster.png)](docs/assets/claude-epic-status-line.mp4)
 
-*Click to play, or [watch it on the documentation site](https://dsebastien.github.io/claude-epic-status-line/#see-it-in-action).*
+_Click to play, or [watch it on the documentation site](https://dsebastien.github.io/claude-epic-status-line/#see-it-in-action)._
 
 ### The status line itself
 
@@ -18,24 +18,24 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that displ
 
 ## Features
 
-| Segment | Description |
-|---------|-------------|
-| **Model** | Short model name (e.g., `Opus 4.6` instead of `Claude Opus 4.6`) |
-| **Context** | Usage percentage + token counts (e.g., `12% (42k/200k)`) with color coding |
-| **Auto-compact warning** | Steady bold `⚠` when context usage >= 80% |
-| **Directory** | Truncated to last 2 path components |
-| **Git branch** | Branch name with detailed status: staged (`S:2`), unstaged (`U:1`), untracked (`A:3`) |
-| **Git ahead/behind** | `⇡2⇣1` arrows showing commits ahead/behind upstream |
-| **Worktree** | `⎇wt` indicator when running inside a git worktree |
-| **Session cost** | `$X.XX` with configurable warn/critical thresholds and currency |
-| **Session duration** | `5m`, `1h30m`, etc. |
-| **Lines changed** | `+156/-23` cumulative lines added/removed |
-| **Per-turn cost** | `48k/turn` — what the next message costs before you type (at the current model's cache-read rate), and `88t` turns so far |
-| **Effort level** | `● high`, `◑ medium`, `◔ low` (from the session itself) |
-| **Badges** | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+` |
-| **Rate limits** | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times |
-| **Pace projection** | `⇢ 94%` — where the 5-hour / 7-day window lands at the current burn rate |
-| **Context hint** | One line naming the right command: `/compact` for a full window, `/clear` for an expensive one |
+| Segment                  | Description                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **Model**                | Short model name (e.g., `Opus 4.6` instead of `Claude Opus 4.6`)                                                          |
+| **Context**              | Usage percentage + token counts (e.g., `12% (42k/200k)`) with color coding                                                |
+| **Auto-compact warning** | Steady bold `⚠` when context usage >= 80%                                                                                 |
+| **Directory**            | Truncated to last 2 path components                                                                                       |
+| **Git branch**           | Branch name with detailed status: staged (`S:2`), unstaged (`U:1`), untracked (`A:3`)                                     |
+| **Git ahead/behind**     | `⇡2⇣1` arrows showing commits ahead/behind upstream                                                                       |
+| **Worktree**             | `⎇wt` indicator when running inside a git worktree                                                                        |
+| **Session cost**         | `$X.XX` with configurable warn/critical thresholds and currency                                                           |
+| **Session duration**     | `5m`, `1h30m`, etc.                                                                                                       |
+| **Lines changed**        | `+156/-23` cumulative lines added/removed                                                                                 |
+| **Per-turn cost**        | `48k/turn` — what the next message costs before you type (at the current model's cache-read rate), and `88t` turns so far |
+| **Effort level**         | `● high`, `◑ medium`, `◔ low` (from the session itself)                                                                   |
+| **Badges**               | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+`                                               |
+| **Rate limits**          | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times                                         |
+| **Pace projection**      | `⇢ 94%` — where the 5-hour / 7-day window lands at the current burn rate                                                  |
+| **Context hint**         | One line naming the right command: `/compact` for a full window, `/clear` for an expensive one                            |
 
 ### Color coding
 
@@ -158,15 +158,15 @@ Works on Linux and macOS (bash 3.2+, BSD or GNU userland). Date formatting and c
 
 The full guide lives at **[dsebastien.github.io/claude-epic-status-line](https://dsebastien.github.io/claude-epic-status-line/)**, and its sources are in [`docs/`](docs/):
 
-| Page | Covers |
-|------|--------|
-| [Overview](docs/README.md) | What it is, the video, key features |
-| [Installation](docs/install.md) | Requirements, quick and manual install, upgrading, uninstalling |
-| [Usage](docs/usage.md) | Every segment explained, the rate-limit dashboard, the `explain` subcommand |
-| [Configuration](docs/configuration.md) | Every `CESL_*` knob with its default |
-| [Tips & best practices](docs/tips.md) | Theme recipes, threshold tuning, parallel sessions |
-| [Troubleshooting](docs/troubleshooting.md) | When something does not render |
-| [Release notes](docs/release-notes.md) | What changed, and breaking changes |
+| Page                                       | Covers                                                                      |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| [Overview](docs/README.md)                 | What it is, the video, key features                                         |
+| [Installation](docs/install.md)            | Requirements, quick and manual install, upgrading, uninstalling             |
+| [Usage](docs/usage.md)                     | Every segment explained, the rate-limit dashboard, the `explain` subcommand |
+| [Configuration](docs/configuration.md)     | Every `CESL_*` knob with its default                                        |
+| [Tips & best practices](docs/tips.md)      | Theme recipes, threshold tuning, parallel sessions                          |
+| [Troubleshooting](docs/troubleshooting.md) | When something does not render                                              |
+| [Release notes](docs/release-notes.md)     | What changed, and breaking changes                                          |
 
 ## Support
 

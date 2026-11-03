@@ -23,32 +23,32 @@ A typo in a numeric knob cannot break rendering: non-numeric and out-of-range va
 
 ## Escalation thresholds
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CESL_WARN` | `70` | Percentage at which context and rate bars turn yellow |
-| `CESL_HIGH` | `80` | Turn orange; context also gains a steady bold `⚠` |
-| `CESL_CRIT` | `90` | Turn red |
+| Variable    | Default | Description                                           |
+| ----------- | ------- | ----------------------------------------------------- |
+| `CESL_WARN` | `70`    | Percentage at which context and rate bars turn yellow |
+| `CESL_HIGH` | `80`    | Turn orange; context also gains a steady bold `⚠`     |
+| `CESL_CRIT` | `90`    | Turn red                                              |
 
 ## Context size thresholds
 
 These are absolute token counts, not percentages, and they drive the per-turn cost colour and the hint line.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CESL_CTX_WARN` | `60000` | Context size (tokens) at which the per-turn cost turns yellow |
-| `CESL_CTX_HIGH` | `120000` | Turns red, and triggers the `/clear` hint |
-| `CESL_TURN_RATE` | `auto` | Share of the re-sent context billed each turn — the cache-read rate. `auto` follows the model: `0.05` for Opus 5.5 and Sonnet 5.5, `0.025` for Fable 5.1, `0.1` for every other model. Set a number to force it |
+| Variable         | Default  | Description                                                                                                                                                                                                     |
+| ---------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CESL_CTX_WARN`  | `60000`  | Context size (tokens) at which the per-turn cost turns yellow                                                                                                                                                   |
+| `CESL_CTX_HIGH`  | `120000` | Turns red, and triggers the `/clear` hint                                                                                                                                                                       |
+| `CESL_TURN_RATE` | `auto`   | Share of the re-sent context billed each turn — the cache-read rate. `auto` follows the model: `0.05` for Opus 5.5 and Sonnet 5.5, `0.025` for Fable 5.1, `0.1` for every other model. Set a number to force it |
 
 A percentage answers "how much room is left"; it does not answer "what does the next message cost". On a 1M-token window those diverge badly: 486k reads as a comfortable 49% full while quietly re-sending 48k tokens on every single turn (at a 10% cache-read rate; 24k on Opus 5.5), whether you typed a paragraph or "yes". That is why these thresholds are absolute.
 
 ## Session cost
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CESL_COST_WARN` | `5` | Session cost (in display currency) at which the number turns yellow |
-| `CESL_COST_CRIT` | `20` | Cost at which it turns red |
-| `CESL_CURRENCY_SYMBOL` | `$` | Symbol prefixed to costs |
-| `CESL_CURRENCY_RATE` | `1` | Multiplier applied to the USD figure Claude Code reports |
+| Variable               | Default | Description                                                         |
+| ---------------------- | ------- | ------------------------------------------------------------------- |
+| `CESL_COST_WARN`       | `5`     | Session cost (in display currency) at which the number turns yellow |
+| `CESL_COST_CRIT`       | `20`    | Cost at which it turns red                                          |
+| `CESL_CURRENCY_SYMBOL` | `$`     | Symbol prefixed to costs                                            |
+| `CESL_CURRENCY_RATE`   | `1`     | Multiplier applied to the USD figure Claude Code reports            |
 
 To display costs in euros at roughly 0.92 to the dollar:
 
@@ -59,24 +59,24 @@ CESL_CURRENCY_RATE=0.92
 
 ## Bars, glyphs and caching
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CESL_BAR_WIDTH` | `10` | Rate-limit bar width in characters (clamped to 1–200) |
-| `CESL_GLYPHS` | `unicode` | Glyph set: `unicode`, `nerd` (requires a Nerd Font), or `ascii` for maximum compatibility |
-| `CESL_CACHE_TTL` | `60` | Seconds to cache the usage API response |
-| `CESL_CONFIG` | `~/.config/claude-epic-status-line/config.sh` | Path to the config file itself |
+| Variable         | Default                                       | Description                                                                               |
+| ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `CESL_BAR_WIDTH` | `10`                                          | Rate-limit bar width in characters (clamped to 1–200)                                     |
+| `CESL_GLYPHS`    | `unicode`                                     | Glyph set: `unicode`, `nerd` (requires a Nerd Font), or `ascii` for maximum compatibility |
+| `CESL_CACHE_TTL` | `60`                                          | Seconds to cache the usage API response                                                   |
+| `CESL_CONFIG`    | `~/.config/claude-epic-status-line/config.sh` | Path to the config file itself                                                            |
 
 ### Glyph sets
 
-| | `unicode` | `nerd` | `ascii` |
-|---|---|---|---|
-| Separator | `│` | `│` | `\|` |
-| Bar fill / empty | `█` `░` | `█` `░` | `#` `.` |
-| Warning | `⚠` | `⚠` | `!` |
-| Reset marker | `⟳` | `⟳` | `~` |
-| Ahead / behind | `⇡` `⇣` | `⇡` `⇣` | `^` `v` |
-| Worktree | `⎇wt` | `⎇wt` | `wt` |
-| Effort | `●` `◑` `◔` | `●` `◑` `◔` | `*` `o` `.` |
+|                  | `unicode`   | `nerd`      | `ascii`     |
+| ---------------- | ----------- | ----------- | ----------- |
+| Separator        | `│`         | `│`         | `\|`        |
+| Bar fill / empty | `█` `░`     | `█` `░`     | `#` `.`     |
+| Warning          | `⚠`         | `⚠`         | `!`         |
+| Reset marker     | `⟳`         | `⟳`         | `~`         |
+| Ahead / behind   | `⇡` `⇣`     | `⇡` `⇣`     | `^` `v`     |
+| Worktree         | `⎇wt`       | `⎇wt`       | `wt`        |
+| Effort           | `●` `◑` `◔` | `●` `◑` `◔` | `*` `o` `.` |
 
 `nerd` additionally uses a branch glyph from the Nerd Font private-use range. Pick `ascii` when your terminal or font mangles box-drawing characters.
 
@@ -84,22 +84,22 @@ CESL_CURRENCY_RATE=0.92
 
 Set any of these to `0` to hide that segment. All default to `1`.
 
-| Variable | Hides |
-|----------|-------|
-| `CESL_SHOW_MODEL` | The model name |
-| `CESL_SHOW_CONTEXT` | Context percentage and token counts |
-| `CESL_SHOW_DIR` | The working directory |
-| `CESL_SHOW_GIT` | Branch, status counts, ahead/behind, worktree marker |
-| `CESL_SHOW_COST` | Session cost |
-| `CESL_SHOW_DURATION` | Session duration |
-| `CESL_SHOW_LINES` | Lines added/removed |
-| `CESL_SHOW_EFFORT` | Effort level |
-| `CESL_SHOW_TURN` | Per-turn context cost and turn count |
-| `CESL_SHOW_BADGES` | Subagent, fast mode, thinking, vim, output style |
-| `CESL_SHOW_HINT` | The context hint line |
-| `CESL_SHOW_RATE_BLOCK` | The whole rate-limit dashboard |
-| `CESL_SHOW_SCOPED` | The per-model weekly rows only |
-| `CESL_SHOW_EXTRA` | The extra-usage credits row only |
+| Variable               | Hides                                                    |
+| ---------------------- | -------------------------------------------------------- |
+| `CESL_SHOW_MODEL`      | The model name                                           |
+| `CESL_SHOW_CONTEXT`    | Context percentage and token counts                      |
+| `CESL_SHOW_DIR`        | The working directory                                    |
+| `CESL_SHOW_GIT`        | Branch, status counts, ahead/behind, worktree marker     |
+| `CESL_SHOW_COST`       | Session cost                                             |
+| `CESL_SHOW_DURATION`   | Session duration                                         |
+| `CESL_SHOW_LINES`      | Lines added/removed                                      |
+| `CESL_SHOW_EFFORT`     | Effort level                                             |
+| `CESL_SHOW_TURN`       | Per-turn context cost and turn count                     |
+| `CESL_SHOW_BADGES`     | Subagent, fast mode, thinking, vim, output style         |
+| `CESL_SHOW_HINT`       | The context hint line                                    |
+| `CESL_SHOW_RATE_BLOCK` | The whole rate-limit dashboard                           |
+| `CESL_SHOW_SCOPED`     | The per-model weekly rows only                           |
+| `CESL_SHOW_EXTRA`      | The extra-usage credits row only                         |
 | `CESL_SHOW_PROJECTION` | The `⇢ NN%` pace projection on the 5-hour and 7-day rows |
 
 ### Trimming the rate-limit dashboard
@@ -120,9 +120,9 @@ CESL_SHOW_EXTRA=0
 
 ## Colour control
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CESL_COLOR` | `auto` | `auto` honours `NO_COLOR` and `TERM=dumb`; `1` always colours; `0` never does |
+| Variable     | Default | Description                                                                   |
+| ------------ | ------- | ----------------------------------------------------------------------------- |
+| `CESL_COLOR` | `auto`  | `auto` honours `NO_COLOR` and `TERM=dumb`; `1` always colours; `0` never does |
 
 [`NO_COLOR`](https://no-color.org) is respected when it is set to a non-empty value, as is `TERM=dumb`. Set `CESL_COLOR=1` to force colour anyway — useful when piping into something that does understand escapes. Stripping happens at a single point just before output, so no segment can leak colour past the gate.
 
@@ -130,27 +130,27 @@ CESL_SHOW_EXTRA=0
 
 Colours are truecolor `"R;G;B"` strings.
 
-| Variable | Default | Applies to |
-|----------|---------|------------|
-| `CESL_COLOR_TEXT` | `220;220;220` | Default text |
-| `CESL_COLOR_OK` | `0;175;80` | Healthy state |
-| `CESL_COLOR_WARN` | `230;200;0` | Warn state (≥ `CESL_WARN`) |
-| `CESL_COLOR_HIGH` | `255;176;85` | High state (≥ `CESL_HIGH`) |
-| `CESL_COLOR_CRIT` | `255;85;85` | Critical state (≥ `CESL_CRIT`) |
-| `CESL_COLOR_DIR` | `86;182;194` | Working directory |
-| `CESL_COLOR_AGENT` | `180;140;255` | Subagent badge |
+| Variable           | Default       | Applies to                     |
+| ------------------ | ------------- | ------------------------------ |
+| `CESL_COLOR_TEXT`  | `220;220;220` | Default text                   |
+| `CESL_COLOR_OK`    | `0;175;80`    | Healthy state                  |
+| `CESL_COLOR_WARN`  | `230;200;0`   | Warn state (≥ `CESL_WARN`)     |
+| `CESL_COLOR_HIGH`  | `255;176;85`  | High state (≥ `CESL_HIGH`)     |
+| `CESL_COLOR_CRIT`  | `255;85;85`   | Critical state (≥ `CESL_CRIT`) |
+| `CESL_COLOR_DIR`   | `86;182;194`  | Working directory              |
+| `CESL_COLOR_AGENT` | `180;140;255` | Subagent badge                 |
 
 ### Model-family hues
 
 These colour the model name only.
 
-| Variable | Default |
-|----------|---------|
-| `CESL_COLOR_OPUS` | `180;140;255` |
-| `CESL_COLOR_SONNET` | `0;153;255` |
-| `CESL_COLOR_HAIKU` | `64;200;180` |
-| `CESL_COLOR_FABLE` | `240;190;60` |
-| `CESL_COLOR_MODEL` | `0;153;255` (fallback for unrecognised models) |
+| Variable            | Default                                        |
+| ------------------- | ---------------------------------------------- |
+| `CESL_COLOR_OPUS`   | `180;140;255`                                  |
+| `CESL_COLOR_SONNET` | `0;153;255`                                    |
+| `CESL_COLOR_HAIKU`  | `64;200;180`                                   |
+| `CESL_COLOR_FABLE`  | `240;190;60`                                   |
+| `CESL_COLOR_MODEL`  | `0;153;255` (fallback for unrecognised models) |
 
 ## Authentication and caching
 
