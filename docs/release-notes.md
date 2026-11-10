@@ -7,6 +7,12 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
+## v2.2.1 — Fable 5.2 and Mythos 5.2
+
+### Fixes
+
+- **Per-turn cost on Fable 5.2 and Mythos 5.2** — both models read cache at 2.5% of the input price, like Fable 5.1, but `CESL_TURN_RATE=auto` gave them the 10% default, so `/turn` was four times too high. Mythos 5.1 had the same problem. `auto` now uses 2.5% for Fable and Mythos 5.1 and 5.2. Fable 5 and Mythos 5 keep 10% (platform.claude.com model overview, November 2026).
+
 ## v2.2.0 — Ultra plans and per-model cache rates
 
 Two changes driven by Anthropic's own updates: the Max 20x plan became Ultra on 2026-10-30, with no 5-hour limit for verified accounts, and Opus 5.5, Sonnet 5.5 and Fable 5.1 read cache cheaper than other models.

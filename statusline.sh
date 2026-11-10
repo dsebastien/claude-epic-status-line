@@ -83,7 +83,7 @@ _cesl_cfg="${CESL_CONFIG:-$HOME/.config/claude-epic-status-line/config.sh}"
 : "${CESL_CTX_HIGH:=120000}"
 # Share of the re-sent context that is billed each turn (cache-read rate).
 # "auto" picks the rate of the current model: Opus 5.5 and Sonnet 5.5 read
-# cache at 5% of the input price, Fable 5.1 at 2.5%, every other model at 10%
+# cache at 5% of the input price, Fable/Mythos 5.1 and 5.2 at 2.5%, every other model at 10%
 : "${CESL_TURN_RATE:=auto}"
 # Colour: auto (honour NO_COLOR / TERM=dumb) | 1 (always) | 0 (never)
 : "${CESL_COLOR:=auto}"
@@ -432,7 +432,8 @@ if [ "$turn_rate" = "auto" ]; then
     fi
     case "$model_lc" in
         # Right boundary: "opus-5-50" or "fable 5.10" must not match
-        *fable-5-1|*fable-5-1[!0-9]*|*"fable 5.1"|*"fable 5.1"[!0-9]*)
+        # Fable / Mythos 5.1 and 5.2 (not Fable 5 or Mythos 5)
+        *fable-5-[12]|*fable-5-[12][!0-9]*|*"fable 5."[12]|*"fable 5."[12][!0-9]*|        *mythos-5-[12]|*mythos-5-[12][!0-9]*|*"mythos 5."[12]|*"mythos 5."[12][!0-9]*)
             turn_rate=0.025 ;;
         *opus-5-5|*opus-5-5[!0-9]*|*"opus 5.5"|*"opus 5.5"[!0-9]*|\
         *sonnet-5-5|*sonnet-5-5[!0-9]*|*"sonnet 5.5"|*"sonnet 5.5"[!0-9]*)

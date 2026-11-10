@@ -81,7 +81,7 @@ The per-model weekly bar is the one that ruins weeks. Glance at it before kickin
 
 ## Watch `k/turn`, not the percentage
 
-The percentage answers "how much room is left". `48k/turn` answers "what does the next message cost", and on a large window they disagree: 486k of a 1M window is under half full and still re-sends 48k tokens on every turn (at a 10% cache-read rate; Opus 5.5, Sonnet 5.5 and Fable 5.1 read cache cheaper, and the status line uses the rate of the model you are on), because the API is stateless and turn N re-sends turns 1..N-1. A one-word reply costs exactly what a complex request costs.
+The percentage answers "how much room is left". `48k/turn` answers "what does the next message cost", and on a large window they disagree: 486k of a 1M window is under half full and still re-sends 48k tokens on every turn (at a 10% cache-read rate; Opus 5.5, Sonnet 5.5, Fable 5.1/5.2 and Mythos 5.1/5.2 read cache cheaper, and the status line uses the rate of the model you are on), because the API is stateless and turn N re-sends turns 1..N-1. A one-word reply costs exactly what a complex request costs.
 
 The practical consequence is that **`/clear` between unrelated tasks is the biggest lever you have**, and it is free. Four forty-turn sessions move less than half the context of one hundred-and-sixty-turn session, for identical work — and none of them goes near the ceiling. Shorter prompts are not the lever; session size is.
 

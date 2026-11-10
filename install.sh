@@ -87,7 +87,7 @@ else
 #CESL_CTX_HIGH=120000
 
 ## Share of the re-sent context billed each turn (the cache-read rate).
-## auto = per model: 0.05 for Opus 5.5 / Sonnet 5.5, 0.025 for Fable 5.1, 0.1 otherwise
+## auto = per model: 0.05 for Opus 5.5 / Sonnet 5.5, 0.025 for Fable/Mythos 5.1 and 5.2, 0.1 otherwise
 #CESL_TURN_RATE=auto
 
 ## Segment toggles (1 = shown, 0 = hidden)
