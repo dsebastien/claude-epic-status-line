@@ -117,11 +117,16 @@ out=$(render "$(payload "$big" --arg d "$WORK/plain")")
 has "opus 5.5 reads cache at 5%" "$out" "24k/turn"
 has "hint above 120k"            "$out" "486k context — every turn re-sends it, ~24k at the cache rate"
 has "hint names the cache expiry" "$out" "cache warm until 9:28am"
-out=$(render "$(payload "$big | .model = {id: \"claude-fable-5-2\", display_name: \"Fable 5.2\"}" --arg d "$WORK/plain")")
+# Filters with quotes live in single-quoted variables: bash 3.2 keeps the
+# backslashes of \" inside "$( ... )"
+m_fable52='.model = {id: "claude-fable-5-2", display_name: "Fable 5.2"}'
+m_fable5='.model = {id: "claude-fable-5", display_name: "Fable 5"}'
+m_opus550='.model = {id: "claude-opus-5-50", display_name: "Opus 5.50"}'
+out=$(render "$(payload "$big | $m_fable52" --arg d "$WORK/plain")")
 has "fable 5.2 reads cache at 2.5%" "$out" "12k/turn"
-out=$(render "$(payload "$big | .model = {id: \"claude-fable-5\", display_name: \"Fable 5\"}" --arg d "$WORK/plain")")
+out=$(render "$(payload "$big | $m_fable5" --arg d "$WORK/plain")")
 has "fable 5 reads cache at 10%" "$out" "48k/turn"
-out=$(render "$(payload "$big | .model = {id: \"claude-opus-5-50\", display_name: \"Opus 5.50\"}" --arg d "$WORK/plain")")
+out=$(render "$(payload "$big | $m_opus550" --arg d "$WORK/plain")")
 has "opus-5-50 is not opus 5.5" "$out" "48k/turn"
 out=$(printf '%s' "$(payload "$big" --arg d "$WORK/plain")" | CESL_TURN_RATE=0.5 "$SH" "$SL")
 has "explicit rate wins" "$out" "243k/turn"
