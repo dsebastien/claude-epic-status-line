@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            shell: bash
+          # /bin/bash on macOS is bash 3.2 with a BSD userland: the oldest
+          # shell the script supports, and what a stock Mac runs it with
+          - name: macOS (bash 3.2)
+            os: macos-latest
+            shell: /bin/bash
+          - name: Windows (Git Bash)
+            os: windows-latest
+            shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        shell: bash
+        run: |
+          ${{ matrix.shell }} -n statusline.sh
+          ${{ matrix.shell }} -n install.sh
+          ${{ matrix.shell }} -n uninstall.sh
+          ${{ matrix.shell }} -n tests/run.sh
+      - name: Test suite
+        shell: bash
+        env:
+          CESL_TEST_BASH: ${{ matrix.shell }}
+        run: ${{ matrix.shell }} tests/run.sh

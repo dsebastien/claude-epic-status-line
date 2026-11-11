@@ -102,6 +102,8 @@ else
 #CESL_SHOW_EFFORT=1
 #CESL_SHOW_BADGES=1
 #CESL_SHOW_HINT=1
+## Prompt-cache state: "next turn (cache cold)" and the expiry time in the hint
+#CESL_SHOW_CACHE=1
 
 ## Rate-limit dashboard. CESL_SHOW_RATE_BLOCK=0 hides all of it; the three
 ## below switch individual rows, so you can drop one without losing the rest.

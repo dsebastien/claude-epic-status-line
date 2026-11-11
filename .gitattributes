@@ -1,0 +1,6 @@
+# Shell scripts must keep LF line endings on every platform: a CRLF checkout
+# (Git for Windows default) breaks bash.
+* text=auto eol=lf
+*.png binary
+*.mp4 binary
+*.gif binary

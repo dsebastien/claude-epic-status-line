@@ -33,10 +33,10 @@ A typo in a numeric knob cannot break rendering: non-numeric and out-of-range va
 
 These are absolute token counts, not percentages, and they drive the per-turn cost colour and the hint line.
 
-| Variable         | Default  | Description                                                                                                                                                                                                     |
-| ---------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CESL_CTX_WARN`  | `60000`  | Context size (tokens) at which the per-turn cost turns yellow                                                                                                                                                   |
-| `CESL_CTX_HIGH`  | `120000` | Turns red, and triggers the `/clear` hint                                                                                                                                                                       |
+| Variable         | Default  | Description                                                                                                                                                                                                                        |
+| ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CESL_CTX_WARN`  | `60000`  | Context size (tokens) at which the per-turn cost turns yellow                                                                                                                                                                      |
+| `CESL_CTX_HIGH`  | `120000` | Turns red, and triggers the `/clear` hint                                                                                                                                                                                          |
 | `CESL_TURN_RATE` | `auto`   | Share of the re-sent context billed each turn — the cache-read rate. `auto` follows the model: `0.05` for Opus 5.5 and Sonnet 5.5, `0.025` for Fable and Mythos 5.1 and 5.2, `0.1` for every other model. Set a number to force it |
 
 A percentage answers "how much room is left"; it does not answer "what does the next message cost". On a 1M-token window those diverge badly: 486k reads as a comfortable 49% full while quietly re-sending 48k tokens on every single turn (at a 10% cache-read rate; 24k on Opus 5.5), whether you typed a paragraph or "yes". That is why these thresholds are absolute.
@@ -84,23 +84,24 @@ CESL_CURRENCY_RATE=0.92
 
 Set any of these to `0` to hide that segment. All default to `1`.
 
-| Variable               | Hides                                                    |
-| ---------------------- | -------------------------------------------------------- |
-| `CESL_SHOW_MODEL`      | The model name                                           |
-| `CESL_SHOW_CONTEXT`    | Context percentage and token counts                      |
-| `CESL_SHOW_DIR`        | The working directory                                    |
-| `CESL_SHOW_GIT`        | Branch, status counts, ahead/behind, worktree marker     |
-| `CESL_SHOW_COST`       | Session cost                                             |
-| `CESL_SHOW_DURATION`   | Session duration                                         |
-| `CESL_SHOW_LINES`      | Lines added/removed                                      |
-| `CESL_SHOW_EFFORT`     | Effort level                                             |
-| `CESL_SHOW_TURN`       | Per-turn context cost and turn count                     |
-| `CESL_SHOW_BADGES`     | Subagent, fast mode, thinking, vim, output style         |
-| `CESL_SHOW_HINT`       | The context hint line                                    |
-| `CESL_SHOW_RATE_BLOCK` | The whole rate-limit dashboard                           |
-| `CESL_SHOW_SCOPED`     | The per-model weekly rows only                           |
-| `CESL_SHOW_EXTRA`      | The extra-usage credits row only                         |
-| `CESL_SHOW_PROJECTION` | The `⇢ NN%` pace projection on the 5-hour and 7-day rows |
+| Variable               | Hides                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `CESL_SHOW_MODEL`      | The model name                                                                   |
+| `CESL_SHOW_CONTEXT`    | Context percentage and token counts                                              |
+| `CESL_SHOW_DIR`        | The working directory                                                            |
+| `CESL_SHOW_GIT`        | Branch, status counts, ahead/behind, worktree marker                             |
+| `CESL_SHOW_COST`       | Session cost                                                                     |
+| `CESL_SHOW_DURATION`   | Session duration                                                                 |
+| `CESL_SHOW_LINES`      | Lines added/removed                                                              |
+| `CESL_SHOW_EFFORT`     | Effort level                                                                     |
+| `CESL_SHOW_TURN`       | Per-turn context cost and turn count                                             |
+| `CESL_SHOW_CACHE`      | The prompt-cache state: `next turn (cache cold)` and the expiry time in the hint |
+| `CESL_SHOW_BADGES`     | Subagent, fast mode, thinking, vim, output style                                 |
+| `CESL_SHOW_HINT`       | The context hint line                                                            |
+| `CESL_SHOW_RATE_BLOCK` | The whole rate-limit dashboard                                                   |
+| `CESL_SHOW_SCOPED`     | The per-model weekly rows only                                                   |
+| `CESL_SHOW_EXTRA`      | The extra-usage credits row only                                                 |
+| `CESL_SHOW_PROJECTION` | The `⇢ NN%` pace projection on the 5-hour and 7-day rows                         |
 
 ### Trimming the rate-limit dashboard
 
@@ -111,7 +112,7 @@ Set any of these to `0` to hide that segment. All default to `1`.
 CESL_SHOW_EXTRA=0
 ```
 
-`CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA` are the only two rows that need the usage API. Setting **both** to `0` skips OAuth token resolution and the HTTP request entirely on every render, which is the cheapest the status line gets while keeping the 5-hour and 7-day bars:
+`CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA` are the only two rows that need the usage API. Setting **both** to `0` skips the usage cache, OAuth token resolution and the HTTP request entirely, while keeping the 5-hour and 7-day bars:
 
 ```bash
 CESL_SHOW_SCOPED=0
@@ -162,5 +163,7 @@ The per-model weekly limits and extra-usage credits come from the Anthropic usag
 4. macOS Keychain (`security find-generic-password`)
 
 Responses are cached in a private per-user directory under `$XDG_RUNTIME_DIR` (falling back to `$TMPDIR`, then `/tmp`), created with mode `700` and validated for ownership before use. Concurrent Claude sessions share a single fetch through a lock rather than each hitting the API.
+
+The request never runs on the render path. A render reads a small digest of the last response. When the digest is older than `CESL_CACHE_TTL`, the render still uses it, and starts one background job that refreshes it for the next render. A digest older than 24 hours is ignored. After a failed request, the next attempt waits for one TTL.
 
 If no token is found, those two rows do not render and nothing else is affected.

@@ -31,6 +31,7 @@ _Click to play, or [watch it on the documentation site](https://dsebastien.githu
 | **Session duration**     | `5m`, `1h30m`, etc.                                                                                                       |
 | **Lines changed**        | `+156/-23` cumulative lines added/removed                                                                                 |
 | **Per-turn cost**        | `48k/turn` — what the next message costs before you type (at the current model's cache-read rate), and `88t` turns so far |
+| **Cold prompt cache**    | `486k next turn (cache cold)` — once the prompt cache has expired, the next message re-writes the whole context           |
 | **Effort level**         | `● high`, `◑ medium`, `◔ low` (from the session itself)                                                                   |
 | **Badges**               | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+`                                               |
 | **Rate limits**          | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times                                         |
@@ -146,13 +147,21 @@ CESL_SHOW_EXTRA=0
 
 ## How it works
 
-The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, etc.). The stdin payload is parsed in a single `jq` call for performance (auxiliary data — cache validation, API enrichment — uses separate small jq invocations), then the status line segments are assembled.
+The script receives JSON from Claude Code via stdin with session data (model, context window usage, cwd, cost, effort, rate limits, prompt cache, etc.). A render is bash builtins plus one `jq` call for the whole stdin payload and one `git status` call. That matters because Claude Code cancels a render that is still running when the next update arrives: a slow status line is a stale status line.
 
-The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended; the turn count needs ≥ 2.1.251). Their pace projections are derived from the same payload — the window opened at `resets_at` minus its own length, so no state file and no extra request are needed. On a verified Ultra account there is no 5-hour limit, so the 5-hour row does not show. The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). No token? Those rows simply don't render.
+The 5-hour and 7-day rate-limit bars come straight from that stdin data (Claude Code ≥ 2.1.140 recommended; the turn count needs ≥ 2.1.251). Their pace projections are derived from the same payload — the window opened at `resets_at` minus its own length, so no state file and no extra request are needed. On a verified Ultra account there is no 5-hour limit, so the 5-hour row does not show. The Anthropic usage API is queried only as enrichment — extra-usage credits and per-model weekly limits — using your OAuth token (resolved from `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, `secret-tool` on Linux, or macOS Keychain), cached in a per-user directory for `CESL_CACHE_TTL` seconds (60 by default). The request never runs on the render path: a render reads the cached result, and when that result is older than the TTL, one background job refreshes it for the next render. No token? Those rows simply don't render.
 
 ## Platform support
 
-Works on Linux and macOS (bash 3.2+, BSD or GNU userland). Date formatting and credential resolution adapt automatically to the platform. Git and keychain lookups are bounded to ~2 seconds — via `timeout(1)` where available, or a built-in fallback on stock macOS — so a huge repository can never freeze your status line.
+Works on Linux, macOS and Windows (Git Bash) — bash 3.2+, BSD or GNU userland. Date formatting, paths and credential resolution adapt automatically to the platform. A render takes about 65 ms on Linux and under a second on Windows, where starting a process is expensive. Git and keychain lookups are bounded to ~2 seconds — via `timeout(1)` where available, or a built-in fallback on stock macOS — so a huge repository can never freeze your status line.
+
+## Tests
+
+```bash
+bash tests/run.sh
+```
+
+The suite runs the script against fixture payloads with a throwaway `HOME`, a fixed clock and a fake `curl`: it does not touch your configuration, your usage cache or the network. CI runs it on Linux, macOS (stock bash 3.2) and Windows (Git Bash).
 
 ## Documentation
 

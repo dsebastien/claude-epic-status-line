@@ -29,37 +29,40 @@ A third part appears only when it has something to say: a hint line under the da
 
 ## Line 1: the session at a glance
 
-| Segment                  | Example                  | What it tells you                                                                                                                                                   |
-| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Model**                | `Fable 5`                | The model, shortened, and coloured by family — Opus, Sonnet, Haiku and Fable each get their own hue                                                                 |
-| **Context**              | `38% (76k/200k)`         | Percentage **and** token counts, so you can act on the absolute number as well as the ratio                                                                         |
-| **Auto-compact warning** | `⚠ 85%`                  | A steady bold `⚠` appears at `CESL_HIGH` (80% by default) — your cue to `/compact` before it happens to you                                                         |
-| **200k alert**           | `⚠200k+`                 | A separate badge when you cross the 200k token line                                                                                                                 |
-| **Directory**            | `…/wks/my-project`       | The last two path components, so long paths do not eat the line                                                                                                     |
-| **Git branch**           | `feature/epic-v2`        | Current branch                                                                                                                                                      |
-| **Git status**           | `S:2 U:1 A:3`            | Staged, unstaged and untracked file counts                                                                                                                          |
-| **Ahead / behind**       | `⇡2⇣1`                   | Commits ahead of and behind upstream                                                                                                                                |
-| **Worktree**             | `⎇wt`                    | You are inside a git worktree, not the main checkout                                                                                                                |
-| **Session cost**         | `$1.87`                  | What this session has spent, with its own warn / critical thresholds and optional currency conversion                                                               |
-| **Duration**             | `1h31m`                  | How long the session has been running                                                                                                                               |
-| **Lines changed**        | `+156/-23`               | Cumulative lines added and removed — a quick honesty check on what the session produced                                                                             |
-| **Per-turn cost**        | `7.6k/turn`              | What the next message costs _before you type a character_ — the whole context re-sent at the cache-read rate. Yellow past `CESL_CTX_WARN`, red past `CESL_CTX_HIGH` |
-| **Turns**                | `88t`                    | API requests on this conversation so far. Requires Claude Code ≥ 2.1.251                                                                                            |
-| **Effort**               | `● high`                 | The session's effort level (`●` high, `◑` medium, `◔` low)                                                                                                          |
-| **Badges**               | `fast · [code-reviewer]` | Subagent name, fast mode, thinking, vim mode, non-default output style                                                                                              |
+| Segment                  | Example                       | What it tells you                                                                                                                                                   |
+| ------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Model**                | `Fable 5`                     | The model, shortened, and coloured by family — Opus, Sonnet, Haiku and Fable each get their own hue                                                                 |
+| **Context**              | `38% (76k/200k)`              | Percentage **and** token counts, so you can act on the absolute number as well as the ratio                                                                         |
+| **Auto-compact warning** | `⚠ 85%`                       | A steady bold `⚠` appears at `CESL_HIGH` (80% by default) — your cue to `/compact` before it happens to you                                                         |
+| **200k alert**           | `⚠200k+`                      | A separate badge when you cross the 200k token line                                                                                                                 |
+| **Directory**            | `…/wks/my-project`            | The last two path components, so long paths do not eat the line                                                                                                     |
+| **Git branch**           | `feature/epic-v2`             | Current branch                                                                                                                                                      |
+| **Git status**           | `S:2 U:1 A:3`                 | Staged, unstaged and untracked file counts                                                                                                                          |
+| **Ahead / behind**       | `⇡2⇣1`                        | Commits ahead of and behind upstream                                                                                                                                |
+| **Worktree**             | `⎇wt`                         | You are inside a git worktree, not the main checkout                                                                                                                |
+| **Session cost**         | `$1.87`                       | What this session has spent, with its own warn / critical thresholds and optional currency conversion                                                               |
+| **Duration**             | `1h31m`                       | How long the session has been running                                                                                                                               |
+| **Lines changed**        | `+156/-23`                    | Cumulative lines added and removed — a quick honesty check on what the session produced                                                                             |
+| **Per-turn cost**        | `7.6k/turn`                   | What the next message costs _before you type a character_ — the whole context re-sent at the cache-read rate. Yellow past `CESL_CTX_WARN`, red past `CESL_CTX_HIGH` |
+| **Turns**                | `88t`                         | API requests on this conversation so far. Requires Claude Code ≥ 2.1.251                                                                                            |
+| **Cold prompt cache**    | `486k next turn (cache cold)` | Replaces the per-turn cost once the prompt cache has expired: the next message re-writes the whole context. Requires Claude Code ≥ 2.1.251                          |
+| **Effort**               | `● high`                      | The session's effort level (`●` high, `◑` medium, `◔` low)                                                                                                          |
+| **Badges**               | `fast · [code-reviewer]`      | Subagent name, fast mode, thinking, vim mode, non-default output style                                                                                              |
 
 ## The rate-limit dashboard
 
 Each row is a progress bar with the same colour escalation as everything else, followed by the value and the exact reset time.
 
-| Row          | Source        | Meaning                                                                                                                                   |
-| ------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `5-hour`     | stdin payload | Your rolling 5-hour usage window                                                                                                          |
-| `7-day`      | stdin payload | Your rolling 7-day usage window                                                                                                           |
-| _model name_ | usage API     | The **per-model weekly limit** for the family you are currently using. Claude Code's own UI does not show this number anywhere            |
-| `extra`      | usage API     | Extra-usage credits consumed against your cap, in currency rather than percent. Only rendered when extra usage is enabled on your account |
+| Row          | Source        | Meaning                                                                                                                                             |
+| ------------ | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `5-hour`     | stdin payload | Your rolling 5-hour usage window                                                                                                                    |
+| `7-day`      | stdin payload | Your rolling 7-day usage window                                                                                                                     |
+| _model name_ | usage API     | A **per-model weekly limit**, one row per model family that has one (`fable`, for example). Claude Code's own UI does not show this number anywhere |
+| `extra`      | usage API     | Extra-usage credits consumed against your cap, in currency rather than percent. Only rendered when extra usage is enabled on your account           |
 
-The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working.
+The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working. The request runs in the background, so on a new machine those rows appear on the second render, not the first.
+
+A per-model row shows when the limit is active, or when it has usage. The usage API marks some limits as inactive while they still count: the Fable weekly allowance is one, and hiding it would hide real consumption.
 
 Each row can be hidden on its own — see [trimming the rate-limit dashboard](configuration.md#trimming-the-rate-limit-dashboard). Turning off both API-backed rows also skips the API call entirely.
 
@@ -81,12 +84,21 @@ Past a threshold, a line appears under the dashboard saying what to do about it:
 
 ```
 ⚠ 93% of the window used — /compact now, or /clear if you have switched task
-⚠ 486k context — every turn re-sends it at 48k before you type — /clear between tasks
+⚠ 486k context — every turn re-sends it, ~48k at the cache rate, before you type — /clear between tasks · cache warm until 2:42pm
+⚠ prompt cache expired at 2:42pm — the next turn re-writes 486k at the cache-write rate, not ~48k — /clear first if you have switched task
 ```
 
 The two are different problems and take different commands. A nearly full **window** needs `/compact`; there is no room left. A merely **large** session needs `/clear`; a 486k conversation on a 1M window is only half full and still pays 48k on every turn (at a 10% cache-read rate; 24k on Opus 5.5, see `CESL_TURN_RATE`), so compacting it is beside the point — starting a fresh session for the next task is the fix.
 
-The first fires at `CESL_HIGH` (80% of the window), the second at `CESL_CTX_HIGH` (120k tokens). `CESL_SHOW_HINT=0` turns both off.
+The first fires at `CESL_HIGH` (80% of the window), the second at `CESL_CTX_HIGH` (120k tokens), the third when the prompt cache has expired on a context of `CESL_CTX_WARN` (60k tokens) or more. `CESL_SHOW_HINT=0` turns all of them off.
+
+### When the prompt cache goes cold
+
+The per-turn figure assumes a warm prompt cache: the context is re-sent, but it is read from the cache at a fraction of the input price. The cache has a lifetime (5 minutes or 1 hour, renewed by each request). Once it has passed, the next request cannot read the context from the cache. It writes all of it again, at the cache-write rate, which is above the plain input price. On a 486k session on Opus 5.5, where a cache read costs 5% of the input price, that one turn costs as much as dozens of warm ones.
+
+So when the cache is cold, `24k/turn` would be wrong, and the status line shows `486k next turn (cache cold)` instead, with a hint line. While the cache is warm, the context hint ends with the time at which it expires (`cache warm until 2:42pm`). The decision this supports: after a long break, `/clear` before the next message if you have switched task, because the rewrite buys nothing for the new task.
+
+The data comes from `prompt_cache` in the stdin payload (Claude Code ≥ 2.1.251). Claude Code re-runs the status line on events, so an idle session keeps the last render: set [`refreshInterval`](tips.md#let-an-idle-session-show-a-cold-cache) to see the cold state without touching the session. `CESL_SHOW_CACHE=0` turns all of this off.
 
 ## Colour coding
 

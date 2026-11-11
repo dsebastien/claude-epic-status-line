@@ -13,7 +13,9 @@ nav_order: 2
 | `curl` | Fetches rate-limit enrichment from the Anthropic usage API |
 | `git`  | Branch, status and worktree detection                      |
 
-Plus bash 3.2 or newer. Linux and macOS are both supported, with either BSD or GNU userland — date formatting and credential resolution adapt to the platform automatically.
+Plus bash 3.2 or newer. Linux, macOS and Windows (Git Bash) are supported, with either BSD or GNU userland — date formatting, paths and credential resolution adapt to the platform automatically.
+
+On Windows, Claude Code runs the status line through Git Bash when it is installed. Run `install.sh` from Git Bash, and make sure that `jq` is on the Git Bash `PATH`.
 
 Claude Code **2.1.140 or newer** is recommended: from that version the stdin payload carries your 5-hour and 7-day rate-limit data, so those bars render without touching the API at all.
 

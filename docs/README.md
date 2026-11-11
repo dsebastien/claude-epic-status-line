@@ -27,7 +27,8 @@ A feature-rich status line for [Claude Code](https://code.claude.com) that repla
 - **One escalation scale everywhere** — yellow at 70%, orange at 80% (context also gains a steady bold `⚠`, your cue to `/compact`), red at 90%. When something lights up, it means something.
 - **Rich git context** — branch, staged / unstaged / untracked counts, ahead-behind arrows, and a worktree marker. Invaluable when you run several Claude sessions in parallel.
 - **Configurable down to the hue, or not at all** — thresholds, palette, model-family colours, bar width, glyph sets (`unicode` / `nerd` / `ascii`), per-segment and per-row toggles, `NO_COLOR` support, currency conversion, cache TTL. Every knob is optional.
-- **Plain bash, Linux and macOS** — bash 3.2+, BSD or GNU userland. Only `jq`, `curl` and `git` are required, and a warm render takes about 60 ms.
+- **Knows when the prompt cache goes cold** — `486k next turn (cache cold)` replaces the per-turn figure once the cache has expired, because the next message then re-writes the whole context instead of reading it cheaply.
+- **Plain bash on Linux, macOS and Windows (Git Bash)** — bash 3.2+, BSD or GNU userland. Only `jq`, `curl` and `git` are required. A render is one `jq` call, one `git status` call and bash builtins: about 65 ms on Linux, so the numbers do not lag behind the session.
 
 ## Quick start
 

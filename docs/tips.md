@@ -92,6 +92,20 @@ CESL_CTX_WARN=40000
 CESL_CTX_HIGH=80000
 ```
 
+## Let an idle session show a cold cache
+
+The prompt cache expires while you are away, and that is exactly when Claude Code does not re-run the status line: it renders on events. Add `refreshInterval` (in seconds) to the `statusLine` block of `~/.claude/settings.json`, and the line updates on a timer too:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "bash ~/.claude/statusline-command.sh",
+  "refreshInterval": 30
+}
+```
+
+When you come back from a break, `486k next turn (cache cold)` is on screen before you type. If the next message belongs to another task, `/clear` first: you skip a full rewrite of a context you no longer need.
+
 ## Treat `⇢` as the number that matters on the rate rows
 
 `5-hour ███░░░░░░░ 38% ⟳ 2:42pm ⇢ 94%` is not a 38% problem. The projection extrapolates your current burn rate to the end of the window, and it only appears when that pace overruns — so when you see it, the window runs out before it resets. Either slow down, switch model families, or plan the rest of the work around the reset time next to it.

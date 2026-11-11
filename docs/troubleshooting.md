@@ -37,7 +37,9 @@ If none resolves, the rows are skipped deliberately — this is not an error sta
 
 Extra-usage credits only render when extra usage is actually enabled on your account.
 
-Also check `CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA`. With both set to `0` the API is never called at all, and `explain` says so on its `fetch needed:` line.
+Also check `CESL_SHOW_SCOPED` and `CESL_SHOW_EXTRA`. With both set to `0` the API is never called at all, and `explain` says so on its `needed:` line.
+
+The request runs in the background, so the rows are missing on the very first render and appear on the next one. `explain` reports the state of the digest and of the last fetch on its `digest:` and `fetch:` lines.
 
 ## The pace projection never appears
 
@@ -47,9 +49,13 @@ It also needs a `resets_at` stamp in the stdin payload. Older Claude Code versio
 
 ## Values look stale
 
-The usage API response is cached for `CESL_CACHE_TTL` seconds (60 by default). Lower it, or delete the cache directory reported by `explain`, to force a refresh.
+Check the version first: `~/.claude/statusline-command.sh version`. Before v2.3.0, a render started more than a hundred processes. On Windows (Git Bash) that took several seconds, and Claude Code cancels a render that is still running when the next update arrives, so the line could lag far behind the session. Upgrade.
 
-Cost, duration and lines-changed come from the stdin payload and are never cached.
+The usage API response is cached for `CESL_CACHE_TTL` seconds (60 by default), and it is refreshed in the background, so the per-model and extra-usage rows can be one refresh behind. Lower the TTL, or delete the cache directory reported by `explain`, to force a refresh.
+
+Cost, duration, context and lines-changed come from the stdin payload and are never cached.
+
+Claude Code re-runs the status line on events (a new message, a mode change). An idle session keeps the last render. Set `refreshInterval` in the `statusLine` block of `~/.claude/settings.json` if you want time-based parts, such as a cold prompt cache, to update while idle.
 
 ## Boxes, question marks or mangled characters
 
@@ -79,9 +85,9 @@ Also check `CESL_CONFIG` — if it is set, the script reads that path instead of
 
 ## The status line feels slow
 
-A warm render is around 60 ms. If it feels slower:
+A render is around 65 ms on Linux and under a second on Windows (Git Bash), where starting a process is expensive. The usage API is never on the render path. If it feels slower:
 
-- The first render after the cache expires includes an API round trip. Raise `CESL_CACHE_TTL`.
+- Check the version with `~/.claude/statusline-command.sh version`. Versions before 2.3.0 were much slower, mostly on Windows.
 - Git operations in a very large repository can dominate. Git and keychain lookups are bounded to roughly 2 seconds so they can never freeze the line, but you can remove the cost entirely with `CESL_SHOW_GIT=0`.
 
 ## Something else

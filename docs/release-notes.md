@@ -7,6 +7,30 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
+## v2.3.0 — fast enough to be right
+
+A status line that renders slowly shows old numbers: Claude Code cancels a render that is still running when the next update arrives. On Windows (Git Bash), a render took about 9 seconds, so the line could stay minutes behind the session. This release rebuilds the render path, and fixes what that investigation found.
+
+### What's new
+
+- **A render starts 5 processes instead of 113** — one `jq` call and one `git status` call; everything else is bash builtins. Measured on the same machine: 9 s to 0.8 s on Windows (Git Bash), 178 ms to 65 ms on Linux. The usage API request moved to a background job (stale-while-revalidate), so it can never delay or cancel a render.
+- **Windows (Git Bash) is supported** — the directory showed as `C://Users//me//My Drive//Notes//Vault`; it now shows as `…/Notes/Vault`, and the home directory is abbreviated to `~`.
+- **Cold prompt cache** — once the prompt cache has expired, the per-turn figure is replaced by `486k next turn (cache cold)`, with a hint: the next message re-writes the whole context at the cache-write rate. While the cache is warm, the context hint ends with its expiry time. Needs Claude Code ≥ 2.1.251; `CESL_SHOW_CACHE=0` turns it off.
+- **A test suite and CI** — `bash tests/run.sh`, on Linux, macOS (bash 3.2) and Windows.
+- **`version` subcommand** — `statusline.sh version`, and `explain` prints the version too.
+
+### Fixes
+
+- **The Fable weekly row was hidden** — the usage API marks the Fable weekly allowance as inactive while it counts usage, and inactive limits were dropped. A per-model row now shows when the limit is active or has usage.
+- **Context percentage matches Claude Code** — the script truncated its own division (35%) where Claude Code rounds (36%). It now uses `context_window.used_percentage` from stdin, and rounds when that field is absent.
+- **Interrupted fetches left files behind** — a render cancelled during an API request left `usage-cache.json.<pid>` files in the cache directory. They are removed, and the fetch no longer runs where it can be cancelled.
+- **A timed-out `git status` no longer looks complete** — when the 2-second bound stops git, the counts are followed by `…`.
+- **Worktree marker** — uses `workspace.git_worktree` from stdin when Claude Code sends it.
+
+### Compatibility
+
+On a machine with no usage cache yet, the per-model and extra-usage rows appear on the second render, because the first one only starts the background request. `explain` still fetches in the foreground. The cache directory gains a `usage-digest` file. No configuration changes are required.
+
 ## v2.2.1 — Fable 5.2 and Mythos 5.2
 
 ### Fixes
