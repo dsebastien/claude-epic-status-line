@@ -29,7 +29,7 @@ set -f
 export LC_ALL=C
 shopt -s extglob
 
-cesl_version="2.3.0"
+cesl_version="2.4.0"
 
 mode="${1:-}"
 case "$mode" in

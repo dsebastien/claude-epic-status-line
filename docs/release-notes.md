@@ -7,7 +7,9 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
-## Unreleased
+## v2.4.0 — rate limits on one line
+
+Two additions from a contribution by [@alexandr-todorov](https://github.com/alexandr-todorov), ported onto the v2.3.0 render path, and one fix for Nerd Font users. A render still starts the same number of processes.
 
 ### What's new
 
@@ -18,6 +20,10 @@ Full notes and diffs live on the [GitHub releases page](https://github.com/dseba
 ### Fixes
 
 - **`CESL_GLYPHS=nerd` drew no branch icon** — the Nerd Font glyph had been replaced by a plain space, so the branch showed as `( main)`. It is U+E0A0 again, written as an escape so that no tool can strip it. Reported by [@rblazejewski](https://github.com/rblazejewski) ([#16](https://github.com/dsebastien/claude-epic-status-line/issues/16)).
+
+### Compatibility
+
+No configuration change is needed. The usage digest gains `window` rows; an older digest is still read, and the fallback starts with the next refresh. In `explain`, the `stdin limits:` line is now `limits:`.
 
 ## v2.3.0 — fast enough to be right
 
