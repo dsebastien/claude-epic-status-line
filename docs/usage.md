@@ -55,16 +55,24 @@ Each row is a progress bar with the same colour escalation as everything else, f
 
 | Row          | Source        | Meaning                                                                                                                                             |
 | ------------ | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `5-hour`     | stdin payload | Your rolling 5-hour usage window                                                                                                                    |
-| `7-day`      | stdin payload | Your rolling 7-day usage window                                                                                                                     |
+| `5-hour`     | stdin payload (usage API as fallback) | Your rolling 5-hour usage window                                                                                            |
+| `7-day`      | stdin payload (usage API as fallback) | Your rolling 7-day usage window                                                                                             |
 | _model name_ | usage API     | A **per-model weekly limit**, one row per model family that has one (`fable`, for example). Claude Code's own UI does not show this number anywhere |
 | `extra`      | usage API     | Extra-usage credits consumed against your cap, in currency rather than percent. Only rendered when extra usage is enabled on your account           |
 
-The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working. The request runs in the background, so on a new machine those rows appear on the second render, not the first.
+The 5-hour and 7-day bars come straight from the stdin payload, so they cost nothing. When the payload has no rate-limit data (for example before the first reply of a session) and the usage API is in use for the last two rows, the two bars are filled in from the API response instead. The last two rows are enrichment: they require an OAuth token, and if none is found those rows simply do not render while everything else keeps working. The request runs in the background, so on a new machine those rows appear on the second render, not the first.
 
 A per-model row shows when the limit is active, or when it has usage. The usage API marks some limits as inactive while they still count: the Fable weekly allowance is one, and hiding it would hide real consumption.
 
 Each row can be hidden on its own — see [trimming the rate-limit dashboard](configuration.md#trimming-the-rate-limit-dashboard). Turning off both API-backed rows also skips the API call entirely.
+
+To save vertical space, `CESL_RATE_LAYOUT=inline` puts every row on one line, directly under the session line:
+
+```
+5h ██░░░  38% ⟳ 10:00pm ⇢ 94% │ 7d █░░░░  21% ⟳ nov 14 │ extra █░░░░ $5.12/$20.00 ⟳ dec 1
+```
+
+That example uses `CESL_BAR_WIDTH=5`: a narrower bar keeps the line from wrapping in a small terminal.
 
 ### The pace projection
 

@@ -7,6 +7,18 @@ nav_order: 7
 
 Full notes and diffs live on the [GitHub releases page](https://github.com/dsebastien/claude-epic-status-line/releases).
 
+## Unreleased
+
+### What's new
+
+- **One-line rate limits** — `CESL_RATE_LAYOUT=inline` puts the 5-hour, 7-day, per-model and extra-usage bars on a single line, directly under the session line, with short `5h` / `7d` labels. The default, `rows`, is unchanged. Contributed by [@alexandr-todorov](https://github.com/alexandr-todorov) ([#15](https://github.com/dsebastien/claude-epic-status-line/pull/15)).
+- **5-hour / 7-day fallback** — when Claude Code's stdin payload carries no rate-limit data (for example before the first reply of a session), the two bars are filled in from the usage API instead of disappearing. It uses the response that the per-model and extra-usage rows already fetch, so it never starts a request on its own: with `CESL_SHOW_SCOPED=0` and `CESL_SHOW_EXTRA=0` the API is still never called. Also from [#15](https://github.com/dsebastien/claude-epic-status-line/pull/15).
+- **`explain`** — the `limits:` line (formerly `stdin limits:`) tags each 5-hour / 7-day value with its source: `[stdin]`, `[usage api]` or `[none]`.
+
+### Fixes
+
+- **`CESL_GLYPHS=nerd` drew no branch icon** — the Nerd Font glyph had been replaced by a plain space, so the branch showed as `( main)`. It is U+E0A0 again, written as an escape so that no tool can strip it. Reported by [@rblazejewski](https://github.com/rblazejewski) ([#16](https://github.com/dsebastien/claude-epic-status-line/issues/16)).
+
 ## v2.3.0 — fast enough to be right
 
 A status line that renders slowly shows old numbers: Claude Code cancels a render that is still running when the next update arrives. On Windows (Git Bash), a render took about 9 seconds, so the line could stay minutes behind the session. This release rebuilds the render path, and fixes what that investigation found.

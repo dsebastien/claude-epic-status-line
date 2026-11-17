@@ -5,8 +5,9 @@
 #   - Claude Code statusline stdin JSON (authoritative: model, context, cost,
 #     git cwd, effort, badges, 5-hour/7-day rate limits, prompt cache)
 #     [Claude Code >= 2.1.140]
-#   - OAuth usage API (optional enrichment only: extra-usage credits and
-#     per-model scoped weekly limits; skipped when no token is resolvable).
+#   - OAuth usage API (optional enrichment: extra-usage credits and per-model
+#     scoped weekly limits; skipped when no token is resolvable). When it is
+#     in use, it also fills the 5-hour/7-day rows that stdin does not carry.
 #     Fetched in the background, never on the render path.
 #
 # Configuration (all optional):
@@ -81,6 +82,8 @@ unset _n _v _cesl_names
 : "${CESL_COST_CRIT:=20}"
 # Bars
 : "${CESL_BAR_WIDTH:=10}"
+# Rate-limit layout: rows (one row per limit) | inline (all on one line)
+: "${CESL_RATE_LAYOUT:=rows}"
 # Usage API cache TTL (seconds)
 : "${CESL_CACHE_TTL:=60}"
 # Currency
@@ -144,6 +147,7 @@ case "$CESL_CRIT" in ''|*[!0-9]*) CESL_CRIT=90 ;; esac
 case "$CESL_BAR_WIDTH" in ''|0|*[!0-9]*) CESL_BAR_WIDTH=10 ;; esac
 [ "${#CESL_BAR_WIDTH}" -gt 3 ] && CESL_BAR_WIDTH=10
 CESL_BAR_WIDTH=$(( 10#$CESL_BAR_WIDTH ))
+case "$CESL_RATE_LAYOUT" in inline) ;; *) CESL_RATE_LAYOUT=rows ;; esac
 [ "$CESL_BAR_WIDTH" -eq 0 ] && CESL_BAR_WIDTH=10
 [ "$CESL_BAR_WIDTH" -gt 200 ] && CESL_BAR_WIDTH=200
 case "$CESL_CACHE_TTL" in ''|*[!0-9]*) CESL_CACHE_TTL=60 ;; esac
@@ -204,7 +208,9 @@ case "$CESL_GLYPHS" in
     nerd)
         g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
         g_dot="·"  g_ellipsis="…" g_ahead="⇡" g_behind="⇣" g_wt="⎇wt"
-        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=" " g_proj="⇢"
+        # U+E0A0 (nf-pl-branch), written as an escape: editors and tools
+        # drop private-use characters, which left a plain space here
+        g_eff_high="●" g_eff_med="◑" g_eff_low="◔" g_branch=$'\356\202\240 ' g_proj="⇢"
         ;;
     *)
         g_sep="│"  g_fill="█" g_empty="░" g_warn="⚠︎" g_reset="⟳"
@@ -895,7 +901,7 @@ get_oauth_token() {
     echo ""
 }
 
-# ── Usage API (extra usage + scoped limits only) ────────────────────
+# ── Usage API (extra usage, scoped limits, 5h/7d fallback) ──────────
 # Stale-while-revalidate. A render only ever reads a small pre-digested file
 # (shell builtins, no process). When that digest is older than the TTL, one
 # detached background job refreshes it for the next render. The request can
@@ -910,6 +916,7 @@ get_oauth_token() {
 # per-model and extra-usage data that comes with it.
 #
 # Digest: line 1 "cesl1 <fetch-epoch>", then one line per row:
+#   window <five|seven> <percent> <reset-epoch>
 #   scoped <label> <percent> <reset-epoch> <is_active 0|1>
 #   extra  <percent> <used-cents> <limit-cents>
 # A scoped limit that the API marks inactive is kept when it has usage: the
@@ -925,6 +932,17 @@ def epoch: . as $s
     else "-" end;
 if (type == "object" and ([.five_hour, .seven_day, .limits, .extra_usage] | any(. != null))) then
   (["cesl1", $now] | join("\u001f")),
+  ( ("five", "seven") as $w
+    | (if $w == "five" then (.five_hour)? else (.seven_day)? end) as $o
+    | if ($o | type) == "object" then
+        ((($o.utilization)? // ($o.used_percentage)?) | num) as $p
+        | if $p == null then empty else
+            [ "window", $w,
+              ($p | clean | .[0:12]),
+              ((($o.resets_at)? // "-") | epoch | .[0:64])
+            ] | map(if . == "" then "-" else . end) | join("\u001f")
+          end
+      else empty end ),
   ( ((.limits)? // [])
     | (if type == "array" then . else [] end)
     | map(select(type == "object" and (((.kind)? // "") == "weekly_scoped")))
@@ -968,7 +986,7 @@ load_digest() { # fills usage_rows / usage_state / usage_age from the digest
     [ -f "$digest_file" ] && [ ! -L "$digest_file" ] || return 1
     {
         IFS="$US" read -r magic epoch
-        while [ "$n" -lt 10 ] && IFS= read -r line; do
+        while [ "$n" -lt 12 ] && IFS= read -r line; do
             [ "${#line}" -le 400 ] && usage_rows[n]=${line%$'\r'}
             n=$(( n + 1 ))
         done
@@ -1074,8 +1092,9 @@ fetch_usage() { # holds the lock; runs detached (in the foreground for explain)
     fetch_cleanup
 }
 
-# The API only feeds the scoped-weekly and extra-usage rows. With both hidden
-# there is nothing to enrich, so skip the cache and the request entirely.
+# The API is there for the scoped-weekly and extra-usage rows. With both hidden
+# there is nothing to enrich, so skip the cache and the request entirely: the
+# 5-hour/7-day fallback below never starts a request on its own.
 usage_needed=0
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ] \
    && { [ "$CESL_SHOW_SCOPED" = "1" ] || [ "$CESL_SHOW_EXTRA" = "1" ]; }; then
@@ -1106,6 +1125,41 @@ if [ "$usage_needed" = "1" ]; then
     fi
 fi
 
+# ── 5-hour / 7-day fallback ─────────────────────────────────────────
+# stdin is authoritative. When it carries no window (for example before the
+# first reply of a session), take it from the digest. A stale digest can
+# describe a window that has ended: use it only while its reset is ahead.
+five_src=stdin seven_src=stdin
+[ "$sl_five_pct" = "-" ] && five_src=none
+[ "$sl_seven_pct" = "-" ] && seven_src=none
+if [ "$five_src" = "none" ] || [ "$seven_src" = "none" ]; then
+    for _row in "${usage_rows[@]}"; do
+        _kind="" _a="" _b="" _c=""
+        IFS="$US" read -r _kind _a _b _c <<< "$_row"
+        [ "$_kind" = "window" ] || continue
+        case "$_b" in ''|-) continue ;; esac
+        _ok=0
+        [ "$usage_state" = "fresh" ] && _ok=1
+        case "$_c" in
+            ''|*[!0-9]*) ;;
+            *) [ "${#_c}" -le 12 ] && [ $(( 10#$_c )) -gt "$now" ] && _ok=1 ;;
+        esac
+        [ "$_ok" = "1" ] || continue
+        case "$_a" in
+            five)
+                if [ "$five_src" = "none" ]; then
+                    sl_five_pct=$_b; sl_five_reset=$_c; five_src="usage api"
+                fi
+                ;;
+            seven)
+                if [ "$seven_src" = "none" ]; then
+                    sl_seven_pct=$_b; sl_seven_reset=$_c; seven_src="usage api"
+                fi
+                ;;
+        esac
+    done
+fi
+
 # ── Rate-limit block ────────────────────────────────────────────────
 rate_lines=""
 
@@ -1114,8 +1168,13 @@ rate_row() { # label pct reset_style reset_val [value_text]
     local rgb bar pfmt line
     state_rgb "$pct"; rgb=$_r
     build_bar "$pct" "$CESL_BAR_WIDTH" "$rgb"; bar=$_r
-    printf -v line '%-7.7s' "$label"
-    line="${c_txt}${line}${reset} ${bar}"
+    if [ "$CESL_RATE_LAYOUT" = "inline" ]; then
+        case "$label" in 5-hour) label="5h" ;; 7-day) label="7d" ;; esac
+        line="${c_txt}${label:0:7}${reset} ${bar}"
+    else
+        printf -v line '%-7.7s' "$label"
+        line="${c_txt}${line}${reset} ${bar}"
+    fi
     if [ -n "$vtext" ]; then
         line+=" ${vtext}"
     else
@@ -1124,13 +1183,15 @@ rate_row() { # label pct reset_style reset_val [value_text]
     fi
     fmt_reset_any "$style" "$rval"
     [ -n "$_r" ] && line+=" ${dim}${g_reset}${reset} ${c_txt}${_r}${reset}"
-    [ -n "$rate_lines" ] && rate_lines+="\n"
+    if [ -n "$rate_lines" ]; then
+        if [ "$CESL_RATE_LAYOUT" = "inline" ]; then rate_lines+="$sep"; else rate_lines+="\n"; fi
+    fi
     rate_lines+="$line"
 }
 
 five_proj="" seven_proj=""
 if [ "$CESL_SHOW_RATE_BLOCK" = "1" ]; then
-    # 5-hour / 7-day: stdin is authoritative
+    # 5-hour / 7-day: from stdin, or from the fallback above
     # A 0% window with no reset stamp is a stub, not a window (no 5-hour
     # limit on verified Ultra accounts): do not draw an empty row for it
     if [ "$sl_five_pct" != "-" ]; then
@@ -1249,7 +1310,7 @@ if [ "$mode" = "explain" ]; then
     sanitize "$sl_five_reset" 40; _r5=$_r
     sanitize "$sl_seven_pct" 20; _p7=$_r
     sanitize "$sl_seven_reset" 40
-    echo "stdin limits: 5h=${_p5}% reset=${_r5} | 7d=${_p7}% reset=$_r"
+    echo "limits:       5h=${_p5}% reset=${_r5} [$five_src] | 7d=${_p7}% reset=$_r [$seven_src]"
     [ "$sl_five_pct" = "-" ] && [ "$sl_seven_pct" != "-" ] && echo "              no 5-hour data with a 7-day window: expected on a verified Ultra account (no 5-hour limit)"
     echo "projection:   5h=${five_proj:-n/a} | 7d=${seven_proj:-n/a} (CESL_SHOW_PROJECTION=$CESL_SHOW_PROJECTION)"
     echo "bash:         $BASH_VERSION (time builtin: $have_tfmt)"
@@ -1272,7 +1333,10 @@ fi
 
 # ── Output ──────────────────────────────────────────────────────────
 out="$line1"
-[ -n "$rate_lines" ] && out+="\n\n${rate_lines}"
+if [ -n "$rate_lines" ]; then
+    # inline: the limits sit directly under the session line
+    if [ "$CESL_RATE_LAYOUT" = "inline" ]; then out+="\n${rate_lines}"; else out+="\n\n${rate_lines}"; fi
+fi
 [ -n "$hint_line" ] && out+="\n\n${hint_line}"
 
 if [ "$cesl_color" != "1" ]; then

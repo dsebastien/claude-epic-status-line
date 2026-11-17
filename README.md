@@ -34,7 +34,7 @@ _Click to play, or [watch it on the documentation site](https://dsebastien.githu
 | **Cold prompt cache**    | `486k next turn (cache cold)` — once the prompt cache has expired, the next message re-writes the whole context           |
 | **Effort level**         | `● high`, `◑ medium`, `◔ low` (from the session itself)                                                                   |
 | **Badges**               | Subagent name, fast mode, thinking, vim, non-default output style, `⚠200k+`                                               |
-| **Rate limits**          | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times                                         |
+| **Rate limits**          | `█░` progress bars for 5-hour, 7-day, per-model, and extra usage with reset times, one row each or all on one line        |
 | **Pace projection**      | `⇢ 94%` — where the 5-hour / 7-day window lands at the current burn rate                                                  |
 | **Context hint**         | One line naming the right command: `/compact` for a full window, `/clear` for an expensive one                            |
 

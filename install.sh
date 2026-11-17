@@ -67,6 +67,9 @@ else
 ## Rate-limit bars
 #CESL_BAR_WIDTH=10
 
+## Rate-limit layout: rows (one row per limit) | inline (all on one line)
+#CESL_RATE_LAYOUT=rows
+
 ## Usage API cache TTL in seconds (raise if you run many concurrent sessions)
 #CESL_CACHE_TTL=60
 

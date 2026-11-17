@@ -62,6 +62,7 @@ CESL_CURRENCY_RATE=0.92
 | Variable         | Default                                       | Description                                                                               |
 | ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `CESL_BAR_WIDTH` | `10`                                          | Rate-limit bar width in characters (clamped to 1–200)                                     |
+| `CESL_RATE_LAYOUT` | `rows`                                      | `rows`: one row per rate limit. `inline`: all of them on one line, directly under the session line (pair it with a smaller `CESL_BAR_WIDTH`) |
 | `CESL_GLYPHS`    | `unicode`                                     | Glyph set: `unicode`, `nerd` (requires a Nerd Font), or `ascii` for maximum compatibility |
 | `CESL_CACHE_TTL` | `60`                                          | Seconds to cache the usage API response                                                   |
 | `CESL_CONFIG`    | `~/.config/claude-epic-status-line/config.sh` | Path to the config file itself                                                            |
@@ -118,6 +119,8 @@ CESL_SHOW_EXTRA=0
 CESL_SHOW_SCOPED=0
 CESL_SHOW_EXTRA=0
 ```
+
+When the usage API is in use (one of those two rows is on), it also fills a 5-hour or 7-day bar that the stdin payload does not carry, for example before the first reply of a session. That fallback never starts a request on its own: with both rows off, the API stays unused.
 
 ## Colour control
 

@@ -165,6 +165,15 @@ hasnt "rate block off" "$out" "7-day"
 out=$(printf '%s' "$base" | CESL_GLYPHS=ascii CESL_BAR_WIDTH=5 "$SH" "$SL")
 has "ascii glyphs" "$out" "7-day   ####.  94% ~ nov 12 -> 118%"
 
+# One-line layout
+is "rows layout: a blank line, then one row per limit" "$(render "$base" | grep -c '')" "4"
+out=$(printf '%s' "$base" | CESL_RATE_LAYOUT=inline CESL_BAR_WIDTH=5 "$SH" "$SL")
+is    "inline layout: directly under the session line" "$(printf '%s\n' "$out" | grep -c '')" "2"
+has   "inline layout: short labels, one line" "$out" "5h ██░░░  42% ⟳ 11:00am ⇢ 82% │ 7d ████░  94% ⟳ nov 12 ⇢ 118%"
+hasnt "inline layout: no padded labels"       "$out" "5-hour"
+out=$(printf '%s' "$base" | CESL_RATE_LAYOUT=sideways "$SH" "$SL")
+has "unknown layout falls back to rows" "$out" "5-hour  ████░░░░░░  42%"
+
 # ── Cost ────────────────────────────────────────────────────────────
 out=$(printf '%s' "$base" | CESL_CURRENCY_SYMBOL='€' CESL_CURRENCY_RATE=0.5 "$SH" "$SL")
 has "currency conversion" "$out" "€1.73"
@@ -198,6 +207,9 @@ out=$(line1 "$(render "$(payload '.cwd = $d' --arg d "$WORK/repo")")")
 has "git: branch and counts" "$out" "(main S:1 U:1 A:2 ⇡1)"
 out=$(line1 "$(render "$(payload '.cwd = $d' --arg d "$WORK/repo/sub dir")")")
 has "git: from a subdirectory with a space" "$out" "(main S:1 U:1 A:2 ⇡1)"
+hasnt "git: no branch glyph by default" "$out" "$(printf '\356\202\240')"
+out=$(line1 "$(printf '%s' "$(payload '.cwd = $d' --arg d "$WORK/repo")" | CESL_GLYPHS=nerd "$SH" "$SL")")
+has "git: nerd glyphs draw the branch icon (U+E0A0)" "$out" "($(printf '\356\202\240') main S:1"
 out=$(line1 "$(printf '%s' "$(payload '.cwd = $d' --arg d "$WORK/repo")" | CESL_SHOW_GIT=0 "$SH" "$SL")")
 hasnt "git: off" "$out" "(main"
 out=$(line1 "$(render "$base")")
@@ -210,6 +222,11 @@ has "git: linked worktree is detected without stdin help" "$out" "(feature/x) �
 out=$(line1 "$(render "$(payload '.cwd = $d' --arg d "$WORK/repo")")")
 hasnt "git: main tree is not a worktree" "$out" "⎇wt"
 has   "git: clean tree shows the branch only" "$out" "(main ⇡1)"
+mkdir -p "$WORK/repo/sub dir" "$WORK/wt/sub"
+out=$(line1 "$(render "$(payload '.cwd = $d' --arg d "$WORK/repo/sub dir")")")
+hasnt "git: a subdirectory of the main tree is not a worktree" "$out" "⎇wt"
+out=$(line1 "$(render "$(payload '.cwd = $d' --arg d "$WORK/wt/sub")")")
+has "git: a subdirectory of a linked worktree is one" "$out" "(feature/x) ⎇wt"
 out=$(line1 "$(render "$(payload '.cwd = $d | .workspace.git_worktree = "x"' --arg d "$WORK/plain")")")
 has "git: worktree from stdin" "$out" "⎇wt"
 g checkout -q --detach
@@ -269,6 +286,33 @@ out=$(printf '%s' "$base" | CESL_NOW=$(( CESL_NOW + 200000 )) CLAUDE_CODE_OAUTH_
 hasnt "digest older than 24h is ignored" "$out" "fable"
 i=0
 while [ -f "$cdir/fetch.lck" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$(( i + 1 )); done
+
+# 5-hour / 7-day fallback: the digest fills the windows that stdin lacks
+nolimits=$(payload '.cwd = $d | del(.rate_limits)' --arg d "$WORK/plain")
+jq '.five_hour = {utilization: 30, resets_at: $t}' --argjson t "$(( CESL_NOW + 600 ))" "$FIX/usage.json" > "$WORK/usage-windows.json"
+rm -rf "$cdir"
+out=$(printf '%s' "$nolimits" | CESL_FAKE_USAGE="$WORK/usage-windows.json" "$SH" "$SL" explain)
+has "fallback: explain names the source" "$out" "5h=30% reset=$(( CESL_NOW + 600 )) [usage api] | 7d=95.0% reset=1794510000 [usage api]"
+out=$(render "$nolimits")
+has "fallback: 5-hour row from the usage API" "$out" "5-hour  ███░░░░░░░  30% ⟳ 8:43am"
+has "fallback: 7-day row from the usage API"  "$out" "95% ⟳ nov 12"
+out=$(render "$base")
+has "fallback: stdin wins when it has the windows" "$out" "7-day   █████████░  94% ⟳ nov 12"
+has "fallback: explain tags stdin values" "$(explain "$base")" "[stdin] | 7d=94% reset=1794510000 [stdin]"
+out=$(render "$(payload '.cwd = $d | del(.rate_limits.five_hour)' --arg d "$WORK/plain")")
+has "fallback: fills only the missing window" "$out" "5-hour  ███░░░░░░░  30%"
+has "fallback: keeps the stdin window"        "$out" "7-day   █████████░  94%"
+# Stale digest, 5-hour window over: that row is dropped, the running 7-day window stays
+out=$(printf '%s' "$nolimits" | CESL_NOW=$(( CESL_NOW + 900 )) CLAUDE_CODE_OAUTH_TOKEN='' "$SH" "$SL")
+hasnt "fallback: an ended window is not drawn from a stale digest" "$out" "5-hour"
+has   "fallback: a running window is drawn from a stale digest"    "$out" "95% ⟳ nov 12"
+i=0
+while [ -f "$cdir/fetch.lck" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$(( i + 1 )); done
+# The fallback never starts a request: with both API rows off, nothing is fetched or read
+rm -rf "$cdir"; : > "$WORK/curl-calls"
+out=$(printf '%s' "$nolimits" | CESL_SHOW_SCOPED=0 CESL_SHOW_EXTRA=0 "$SH" "$SL")
+hasnt "fallback: off when the API rows are off" "$out" "7-day"
+is "fallback: makes no request of its own" "$(wc -l < "$WORK/curl-calls" | tr -d ' ')" "0"
 
 # An error body never reaches the cache, and the failure backs off
 rm -rf "$cdir"

@@ -16,7 +16,7 @@ Start with [`explain`](usage.md#the-explain-subcommand) — it prints the raw st
 
 ## The rate-limit dashboard is missing
 
-The 5-hour and 7-day bars come from the stdin payload, which requires Claude Code **2.1.140 or newer**. Upgrade Claude Code, then run `explain` and look at the raw JSON: if there is no rate-limit data in the payload, the version is the cause.
+The 5-hour and 7-day bars come from the stdin payload, which requires Claude Code **2.1.140 or newer**. Upgrade Claude Code, then run `explain` and look at the raw JSON: if there is no rate-limit data in the payload, the version is the cause. Claude Code can also send a payload without rate-limit data before the first reply of a session: the two bars are then filled in from the usage API when it is in use (a per-model or extra-usage row is on and a token resolves). The `limits:` line of `explain` says where each value came from: `[stdin]`, `[usage api]` or `[none]`.
 
 Also confirm `CESL_SHOW_RATE_BLOCK` is not set to `0`.
 
